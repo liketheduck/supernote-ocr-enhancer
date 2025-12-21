@@ -215,9 +215,36 @@ class Database:
             return False, "already_processed"
 
         if record.processing_status == 'processing':
-            return False, "currently_processing"
+            # Stuck from interrupted run - reset and retry
+            return True, "interrupted_recovery"
 
         return True, "pending"
+
+    def reset_all_files(self):
+        """Reset all files to pending status for full reprocessing."""
+        conn = self._get_connection()
+        try:
+            conn.execute("UPDATE note_files SET processing_status = 'pending'")
+            conn.execute("DELETE FROM page_processing")
+            conn.commit()
+            logger.info("Reset all files for reprocessing")
+        finally:
+            conn.close()
+
+    def reset_stuck_processing(self) -> int:
+        """Reset files stuck in 'processing' status from interrupted runs."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.execute(
+                "UPDATE note_files SET processing_status = 'pending' WHERE processing_status = 'processing'"
+            )
+            conn.commit()
+            count = cursor.rowcount
+            if count > 0:
+                logger.info(f"Reset {count} stuck file(s) from interrupted run")
+            return count
+        finally:
+            conn.close()
 
     def get_page_record(
         self,

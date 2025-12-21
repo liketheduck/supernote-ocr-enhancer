@@ -160,6 +160,7 @@ curl http://localhost:8100/health
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `WRITE_TO_NOTE` | `true` | Write OCR data back to files |
 | `CREATE_BACKUPS` | `true` | Create backups before modifying |
+| `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
 
 ## How It Works
 
@@ -294,7 +295,12 @@ supernote-ocr-enhancer/
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) file.
+Apache License 2.0 - See [LICENSE](LICENSE) file.
+
+This means you can use, modify, and distribute this software, but you must:
+- Include the original copyright notice
+- Provide attribution in derivative works
+- State any changes you made
 
 ## Acknowledgments
 

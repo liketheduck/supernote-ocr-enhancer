@@ -42,6 +42,7 @@ PROCESS_INTERVAL = int(os.getenv("PROCESS_INTERVAL", "0"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 CREATE_BACKUPS = os.getenv("CREATE_BACKUPS", "true").lower() == "true"
 WRITE_TO_NOTE = os.getenv("WRITE_TO_NOTE", "true").lower() == "true"
+RESET_DATABASE = os.getenv("RESET_DATABASE", "false").lower() == "true"
 DATA_PATH = Path("/app/data")
 BACKUP_PATH = DATA_PATH / "backups"
 DB_PATH = DATA_PATH / "processing.db"
@@ -310,7 +311,9 @@ def run_processing():
 
     # Process each file
     results = []
-    for note_path in note_files:
+    total_files = len(note_files)
+    for idx, note_path in enumerate(note_files, 1):
+        logger.info(f"[{idx}/{total_files}] Checking {note_path.name}...")
         result = process_note_file(note_path)
         results.append(result)
 
@@ -355,6 +358,7 @@ def main():
     logger.info(f"Process interval: {PROCESS_INTERVAL}s (0 = single run)")
     logger.info(f"Write to .note files: {WRITE_TO_NOTE}")
     logger.info(f"Create backups: {CREATE_BACKUPS}")
+    logger.info(f"Reset database: {RESET_DATABASE}")
 
     # Ensure directories exist
     DATA_PATH.mkdir(parents=True, exist_ok=True)
@@ -363,6 +367,14 @@ def main():
     # Initialize database
     db = Database(DB_PATH)
     logger.info(f"Database initialized: {DB_PATH}")
+
+    # Handle database reset if requested
+    if RESET_DATABASE:
+        logger.warning("RESET_DATABASE=true - Clearing all processing history!")
+        db.reset_all_files()
+
+    # Recover from any interrupted runs (stuck in 'processing' status)
+    db.reset_stuck_processing()
 
     # Initialize OCR client
     ocr_client = OCRClient(OCR_API_URL)

@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: supernote-ocr-enhancer
-    restart: "no"  # Manual runs only, not 24/7
+    restart: unless-stopped  # Keep running for cron jobs
     environment:
       # OCR API endpoint (host machine)
       - OCR_API_URL=http://host.docker.internal:8100
@@ -21,16 +21,18 @@ services:
       # Write settings
       - WRITE_TO_NOTE=${WRITE_TO_NOTE:-true}     # Write OCR data back to .note files
       - CREATE_BACKUPS=${CREATE_BACKUPS:-true}   # Create backups before modifying
+      - RESET_DATABASE=${RESET_DATABASE:-false}  # Clear history and reprocess all files
+      # Sync server coordination (optional - set in .env.local if using sync server)
+      - SYNC_SERVER_COMPOSE=${SYNC_SERVER_COMPOSE:-}
+      - SYNC_SERVER_ENV=${SYNC_SERVER_ENV:-}
     volumes:
       # Supernote data (read-write to inject OCR data)
       # Set SUPERNOTE_DATA_PATH in .env.local
       - ${SUPERNOTE_DATA_PATH:?Set SUPERNOTE_DATA_PATH in .env.local}:/supernote/data
       # Local persistent storage for tracking state and backups
       - ./data:/app/data
-      # Config file
-      - ./config:/app/config:ro
-      # Scripts for testing
-      - ./scripts:/app/scripts:ro
+      # Docker socket for sync server control (optional)
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env.local
     extra_hosts:
