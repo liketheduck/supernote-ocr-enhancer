@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker
+.docker/
+
+# Data files (contain personal notes)
+data/backups/
+data/original-ocr-backup/
+data/*.db
+data/*.json
+data/*.log
+data/*.txt
+
+# Keep the data directory structure and docs
+!data/.gitkeep
+!data/model-comparison-7b-vs-3b.md
+
+# Config with secrets and local overrides
+.env
+.env.local
+config/*.env
+!config/settings.env.example
+
+# Local documentation (contains personal paths)
+README.local.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test outputs
+*.bak
+
+# Test scripts (may contain local paths for testing)
+scripts/test_*.py
+
+# Development/personal instruction files (contain paths)
+supernote-ocr-enhancer-instructions.md

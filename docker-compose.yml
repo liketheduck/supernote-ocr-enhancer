@@ -1,0 +1,38 @@
+# Supernote OCR Enhancer - Docker Compose Configuration
+# Processes .note files using the local MLX-VLM OCR API
+#
+# Usage: docker compose --env-file .env.local up
+# Or create a symlink: ln -s .env.local .env
+
+services:
+  supernote-ocr-enhancer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: supernote-ocr-enhancer
+    restart: "no"  # Manual runs only, not 24/7
+    environment:
+      # OCR API endpoint (host machine)
+      - OCR_API_URL=http://host.docker.internal:8100
+      # Processing settings
+      - SUPERNOTE_DATA_PATH=/supernote/data
+      - PROCESS_INTERVAL=${PROCESS_INTERVAL:-0}  # 0 = single run, >0 = interval in seconds
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Write settings
+      - WRITE_TO_NOTE=${WRITE_TO_NOTE:-true}     # Write OCR data back to .note files
+      - CREATE_BACKUPS=${CREATE_BACKUPS:-true}   # Create backups before modifying
+    volumes:
+      # Supernote data (read-write to inject OCR data)
+      # Set SUPERNOTE_DATA_PATH in .env.local
+      - ${SUPERNOTE_DATA_PATH:?Set SUPERNOTE_DATA_PATH in .env.local}:/supernote/data
+      # Local persistent storage for tracking state and backups
+      - ./data:/app/data
+      # Config file
+      - ./config:/app/config:ro
+      # Scripts for testing
+      - ./scripts:/app/scripts:ro
+    env_file:
+      - .env.local
+    extra_hosts:
+      # Ensure host.docker.internal resolves on all platforms
+      - "host.docker.internal:host-gateway"

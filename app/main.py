@@ -1,0 +1,394 @@
+#!/usr/bin/env python3
+"""
+Supernote OCR Enhancer
+
+Processes Supernote .note files by:
+1. Scanning for .note files in the Supernote data directory
+2. Extracting page images from .note files
+3. Sending images to the MLX-VLM OCR API for high-quality handwriting recognition
+4. Injecting the enhanced OCR data back into the .note files
+
+Goal: Replace Supernote's ~27% word error rate OCR with ~5% error rate from Qwen2.5-VL.
+"""
+
+import os
+import sys
+import json
+import logging
+import time
+import threading
+from pathlib import Path
+from dataclasses import dataclass
+from typing import Optional, List, Dict, Tuple
+from datetime import datetime
+
+from fastapi import FastAPI
+import uvicorn
+
+from database import Database, compute_file_hash, compute_image_hash
+from ocr_client import OCRClient, OCRResult
+from note_processor import (
+    load_notebook,
+    get_notebook_info,
+    extract_page,
+    inject_ocr_results,
+    get_existing_ocr_text
+)
+
+# Configuration from environment
+OCR_API_URL = os.getenv("OCR_API_URL", "http://host.docker.internal:8100")
+SUPERNOTE_DATA_PATH = os.getenv("SUPERNOTE_DATA_PATH", "/supernote/data")
+PROCESS_INTERVAL = int(os.getenv("PROCESS_INTERVAL", "0"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+CREATE_BACKUPS = os.getenv("CREATE_BACKUPS", "true").lower() == "true"
+WRITE_TO_NOTE = os.getenv("WRITE_TO_NOTE", "true").lower() == "true"
+DATA_PATH = Path("/app/data")
+BACKUP_PATH = DATA_PATH / "backups"
+DB_PATH = DATA_PATH / "processing.db"
+
+# Setup logging
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("supernote-ocr-enhancer")
+
+# Initialize components
+db: Optional[Database] = None
+ocr_client: Optional[OCRClient] = None
+
+# FastAPI app for health checks
+app = FastAPI(title="Supernote OCR Enhancer")
+
+# Track processing state
+processing_state = {
+    "status": "idle",
+    "last_run": None,
+    "files_processed": 0,
+    "pages_processed": 0,
+    "current_file": None,
+    "errors": []
+}
+
+
+@dataclass
+class ProcessingResult:
+    """Result of processing a single .note file."""
+    file_path: Path
+    success: bool
+    pages_processed: int
+    pages_skipped: int
+    total_time_ms: float
+    error: Optional[str] = None
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    ocr_available = ocr_client.health_check() if ocr_client else False
+    return {
+        "status": "healthy" if ocr_available else "degraded",
+        "ocr_api_available": ocr_available,
+        "processing_state": processing_state
+    }
+
+
+@app.get("/status")
+async def status():
+    """Detailed status endpoint"""
+    stats = db.get_statistics() if db else {}
+    return {
+        "ocr_api_url": OCR_API_URL,
+        "supernote_data_path": SUPERNOTE_DATA_PATH,
+        "process_interval": PROCESS_INTERVAL,
+        "write_to_note": WRITE_TO_NOTE,
+        "processing_state": processing_state,
+        "database_stats": stats,
+        "note_files_found": count_note_files()
+    }
+
+
+@app.get("/stats")
+async def stats():
+    """Get processing statistics."""
+    return db.get_statistics() if db else {}
+
+
+def count_note_files() -> int:
+    """Count .note files in Supernote data directory"""
+    try:
+        data_path = Path(SUPERNOTE_DATA_PATH)
+        if not data_path.exists():
+            return 0
+        return len(list(data_path.rglob("*.note")))
+    except Exception:
+        return -1
+
+
+def find_note_files() -> List[Path]:
+    """Find all .note files in Supernote data directory"""
+    data_path = Path(SUPERNOTE_DATA_PATH)
+    if not data_path.exists():
+        logger.warning(f"Supernote data path does not exist: {SUPERNOTE_DATA_PATH}")
+        return []
+    return list(data_path.rglob("*.note"))
+
+
+def process_note_file(note_path: Path) -> ProcessingResult:
+    """
+    Process a single .note file.
+
+    1. Check if processing is needed (based on file hash)
+    2. Extract pages as PNG images
+    3. Send each page to OCR API
+    4. Store results in database
+    5. Optionally inject OCR data back into .note file
+    """
+    global processing_state
+    start_time = time.time()
+    processing_state["current_file"] = str(note_path)
+
+    try:
+        # Compute file hash
+        file_hash = compute_file_hash(note_path)
+        file_stat = note_path.stat()
+
+        # Check if processing needed
+        should_process, reason = db.should_process_file(note_path, file_hash)
+        if not should_process:
+            logger.info(f"Skipping {note_path.name}: {reason}")
+            return ProcessingResult(
+                file_path=note_path,
+                success=True,
+                pages_processed=0,
+                pages_skipped=0,
+                total_time_ms=0
+            )
+
+        logger.info(f"Processing {note_path.name} (reason: {reason})")
+
+        # Load notebook
+        notebook = load_notebook(note_path)
+        total_pages = len(notebook.pages)
+
+        # Update database
+        note_id = db.upsert_note_file(
+            note_path,
+            file_hash,
+            file_stat.st_mtime,
+            file_stat.st_size,
+            total_pages
+        )
+        db.update_status(note_path, 'processing')
+
+        # Process each page
+        pages_processed = 0
+        pages_skipped = 0
+        page_results: Dict[int, Tuple[OCRResult, int, int]] = {}
+
+        for page_num in range(total_pages):
+            try:
+                # Extract page image
+                page_data = extract_page(notebook, page_num)
+                page_hash = compute_image_hash(page_data.png_bytes)
+
+                # Check if page already processed with same content
+                if db.is_page_processed(note_id, page_num, page_hash):
+                    logger.debug(f"  Page {page_num} unchanged, skipping")
+                    pages_skipped += 1
+                    continue
+
+                # Run OCR
+                logger.info(f"  OCR page {page_num + 1}/{total_pages}...")
+                ocr_result = ocr_client.ocr_image(page_data.png_bytes)
+
+                # Store in database
+                db.store_page_result(
+                    note_id,
+                    page_num,
+                    page_hash,
+                    json.dumps(ocr_result.raw_response),
+                    ocr_result.full_text,
+                    ocr_result.processing_time_ms
+                )
+
+                # Save for injection
+                page_results[page_num] = (ocr_result, page_data.width, page_data.height)
+
+                logger.info(f"    Found {len(ocr_result.text_blocks)} text blocks, "
+                           f"{len(ocr_result.full_text)} chars, "
+                           f"{ocr_result.processing_time_ms:.0f}ms")
+                pages_processed += 1
+
+            except Exception as e:
+                logger.error(f"  Error processing page {page_num}: {e}")
+                processing_state["errors"].append(f"{note_path.name} page {page_num}: {str(e)}")
+
+        # Inject OCR data back into .note file
+        if WRITE_TO_NOTE and page_results:
+            try:
+                backup_dir = BACKUP_PATH if CREATE_BACKUPS else None
+                inject_ocr_results(note_path, page_results, backup_dir)
+                logger.info(f"  Injected OCR data into {len(page_results)} pages")
+
+                # IMPORTANT: Recompute hash after injection so we don't reprocess
+                new_hash = compute_file_hash(note_path)
+                new_stat = note_path.stat()
+                db.upsert_note_file(
+                    note_path,
+                    new_hash,
+                    new_stat.st_mtime,
+                    new_stat.st_size,
+                    total_pages
+                )
+                logger.debug(f"  Updated file hash after injection")
+            except Exception as e:
+                logger.error(f"  Failed to inject OCR data: {e}")
+                processing_state["errors"].append(f"{note_path.name} injection: {str(e)}")
+
+        # Update status
+        db.update_status(note_path, 'completed')
+
+        total_time = (time.time() - start_time) * 1000
+        logger.info(f"Completed {note_path.name}: {pages_processed} processed, "
+                   f"{pages_skipped} skipped, {total_time:.0f}ms")
+
+        return ProcessingResult(
+            file_path=note_path,
+            success=True,
+            pages_processed=pages_processed,
+            pages_skipped=pages_skipped,
+            total_time_ms=total_time
+        )
+
+    except Exception as e:
+        logger.exception(f"Failed to process {note_path}")
+        db.update_status(note_path, 'failed', error=str(e))
+        processing_state["errors"].append(f"{note_path.name}: {str(e)}")
+
+        return ProcessingResult(
+            file_path=note_path,
+            success=False,
+            pages_processed=0,
+            pages_skipped=0,
+            total_time_ms=(time.time() - start_time) * 1000,
+            error=str(e)
+        )
+    finally:
+        processing_state["current_file"] = None
+
+
+def run_processing():
+    """Run OCR processing on all .note files that need it."""
+    global processing_state
+
+    processing_state["status"] = "processing"
+    processing_state["errors"] = []
+
+    # Check OCR API availability
+    logger.info("Checking OCR API availability...")
+    if not ocr_client.health_check():
+        logger.error("OCR API not available. Start it with: ./scripts/start.sh")
+        processing_state["status"] = "error"
+        processing_state["errors"].append("OCR API not available")
+        return []
+
+    logger.info("OCR API is ready")
+
+    # Find .note files
+    note_files = find_note_files()
+    logger.info(f"Found {len(note_files)} .note files")
+
+    if not note_files:
+        processing_state["status"] = "idle"
+        processing_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return []
+
+    # Start processing run
+    run_id = db.start_processing_run()
+
+    # Process each file
+    results = []
+    for note_path in note_files:
+        result = process_note_file(note_path)
+        results.append(result)
+
+    # Summarize
+    successful = sum(1 for r in results if r.success)
+    failed = sum(1 for r in results if not r.success)
+    total_pages = sum(r.pages_processed for r in results)
+
+    # Complete processing run
+    db.complete_processing_run(
+        run_id,
+        files_scanned=len(note_files),
+        files_processed=successful,
+        files_skipped=0,
+        files_failed=failed,
+        total_pages=total_pages
+    )
+
+    processing_state["status"] = "idle"
+    processing_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    processing_state["files_processed"] = successful
+    processing_state["pages_processed"] = total_pages
+
+    logger.info(f"Processing complete: {successful} files, {total_pages} pages, {failed} failed")
+    return results
+
+
+def run_health_server():
+    """Run the health check server in a separate thread"""
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="warning")
+
+
+def main():
+    """Main entry point"""
+    global db, ocr_client
+
+    logger.info("=" * 60)
+    logger.info("Supernote OCR Enhancer starting...")
+    logger.info("=" * 60)
+    logger.info(f"OCR API URL: {OCR_API_URL}")
+    logger.info(f"Supernote data path: {SUPERNOTE_DATA_PATH}")
+    logger.info(f"Process interval: {PROCESS_INTERVAL}s (0 = single run)")
+    logger.info(f"Write to .note files: {WRITE_TO_NOTE}")
+    logger.info(f"Create backups: {CREATE_BACKUPS}")
+
+    # Ensure directories exist
+    DATA_PATH.mkdir(parents=True, exist_ok=True)
+    BACKUP_PATH.mkdir(parents=True, exist_ok=True)
+
+    # Initialize database
+    db = Database(DB_PATH)
+    logger.info(f"Database initialized: {DB_PATH}")
+
+    # Initialize OCR client
+    ocr_client = OCRClient(OCR_API_URL)
+
+    # Start health server in background
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info("Health server started on port 8080")
+
+    # Show initial stats
+    stats = db.get_statistics()
+    logger.info(f"Database stats: {json.dumps(stats, indent=2)}")
+
+    if PROCESS_INTERVAL == 0:
+        # Single run mode
+        logger.info("Running in single-run mode")
+        run_processing()
+        logger.info("Single run complete. Container will exit.")
+    else:
+        # Continuous mode
+        logger.info(f"Running in continuous mode (interval: {PROCESS_INTERVAL}s)")
+        while True:
+            run_processing()
+            logger.info(f"Sleeping for {PROCESS_INTERVAL}s...")
+            time.sleep(PROCESS_INTERVAL)
+
+
+if __name__ == "__main__":
+    main()
