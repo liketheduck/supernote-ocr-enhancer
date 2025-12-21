@@ -3,7 +3,7 @@
 
 FROM python:3.11-slim-bookworm
 
-LABEL maintainer="dhays"
+LABEL maintainer="liketheduck"
 LABEL description="Supernote OCR Enhancer - processes .note files with MLX-VLM OCR"
 
 # Prevent Python from buffering stdout/stderr

@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+
+# Local configuration (may contain secrets)
+.env
+.env.local
+*.env
+
+# Data files (user-specific, large)
+data/
+!data/.gitkeep
+
+# Local documentation
+README.local.md
+*.local.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test files
+scripts/test_*.py
+
+# Examples (not needed in container)
+examples/
+
+# Development files
+*.md
+!README.md

@@ -46,7 +46,7 @@ Docker container that processes Supernote `.note` files using a local MLX-VLM OC
 ### 1. Clone and Configure
 
 ```bash
-git clone https://github.com/yourusername/supernote-ocr-enhancer.git
+git clone https://github.com/liketheduck/supernote-ocr-enhancer.git
 cd supernote-ocr-enhancer
 
 # Create local configuration
