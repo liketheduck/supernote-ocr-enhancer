@@ -58,12 +58,13 @@ nano .env.local
 
 Required settings in `.env.local`:
 ```bash
-# Path to your Supernote data directory
+# REQUIRED: Path to your Supernote .note files
 SUPERNOTE_DATA_PATH=/path/to/your/supernote/data
 
-# If using sync server coordination (optional)
-SYNC_SERVER_COMPOSE=/path/to/supernote-sync/docker-compose.yml
-SYNC_SERVER_ENV=/path/to/supernote-sync/.env
+# OPTIONAL: Only if using Supernote Cloud sync server
+# (See "Supernote Cloud / Sync Server" section below)
+SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
+SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
 ```
 
 ### 2. Build the Container
@@ -95,7 +96,7 @@ docker compose run --rm supernote-ocr-enhancer
 
 ## OCR API Setup
 
-The OCR API is a separate service that runs natively on macOS for GPU acceleration.
+The OCR API is a separate service that runs **natively on macOS** (not in Docker) to leverage Metal GPU acceleration. You must set this up before running the enhancer.
 
 ### Using uv (recommended)
 
@@ -108,13 +109,38 @@ cd ~/services/ocr-api
 uv init --name ocr-api --python 3.11
 uv add mlx-vlm pillow fastapi uvicorn python-multipart
 
-# Create server.py (see examples/server.py in this repo)
-# Start the server
+# Copy server.py from this repo
+cp /path/to/supernote-ocr-enhancer/examples/server.py .
+
+# Start with 7B model (recommended - better accuracy)
 uv run python server.py
+
+# OR start with 3B model (faster, less RAM)
+OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-3B-Instruct-8bit uv run python server.py
+```
+
+### Model Selection: 7B vs 3B
+
+Both models dramatically improve on Supernote's built-in OCR (~27% word error rate):
+
+| Model | RAM | Speed | Accuracy | Improvement over Supernote |
+|-------|-----|-------|----------|----------------------------|
+| **7B** (default) | ~8GB | ~60-120s/page | ~5% WER | **5x better** |
+| **3B** | ~4GB | ~20-40s/page | ~8-10% WER | ~3x better |
+
+**Recommendation**: Use **7B** unless you're RAM-constrained or batch-processing hundreds of pages. The 3B model is faster but makes more errors on messy handwriting, abbreviations, and edge cases.
+
+Set via environment variable:
+```bash
+# 7B model (default)
+export OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-7B-Instruct-8bit
+
+# 3B model (faster)
+export OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-3B-Instruct-8bit
 ```
 
 The server will:
-1. Download the Qwen2.5-VL-7B-Instruct-8bit model (~9GB, first run only)
+1. Download the selected model (first run only: ~9GB for 7B, ~4GB for 3B)
 2. Start listening on `http://localhost:8100`
 3. Provide `/ocr` endpoint for image OCR with bounding boxes
 
@@ -145,17 +171,39 @@ curl http://localhost:8100/health
 6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block
 7. **Disable re-OCR**: Sets `FILE_RECOGN_TYPE=0` to prevent device from redoing OCR
 
-## Sync Server Coordination
+## Supernote Cloud / Sync Server
 
-If you're running a Supernote sync server (for syncing .note files from your device), the `run-with-sync-control.sh` script will:
+### Do I need this?
 
-1. Check if sync server is running
-2. Stop it gracefully before OCR processing
-3. Run the OCR enhancer
-4. Update the sync server's database with new file sizes/hashes
-5. Restart the sync server
+- **If you manually transfer files** (USB, file manager): You don't need a sync server. Just point `SUPERNOTE_DATA_PATH` to your .note files.
+- **If you use Supernote Cloud sync**: You need to coordinate with it to prevent conflicts.
 
-This prevents file conflicts during sync.
+### What is the Supernote Sync Server?
+
+The [Supernote Cloud](https://github.com/philips/supernote-cloud-docker) or similar self-hosted sync server syncs .note files between your device and Mac. When this tool modifies .note files (injecting OCR), the sync server's database becomes out of sync with the filesystem, causing conflicts.
+
+### Sync Server Coordination
+
+The `run-with-sync-control.sh` script handles this automatically:
+
+1. Stops the sync server before processing
+2. Runs the OCR enhancer
+3. Updates the sync server's MariaDB database with new file sizes/hashes
+4. Restarts the sync server
+
+Configure in `.env.local`:
+```bash
+# Path to your sync server's docker-compose.yml
+SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
+
+# Path to your sync server's .env (contains database password)
+SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
+```
+
+If not using a sync server, leave these blank and run directly:
+```bash
+docker compose run --rm supernote-ocr-enhancer
+```
 
 ## Processing State & File Tracking
 
@@ -234,10 +282,11 @@ supernote-ocr-enhancer/
 │   ├── database.py           # SQLite state tracking
 │   ├── ocr_client.py         # OCR API client
 │   └── note_processor.py     # .note file handling
+├── examples/
+│   └── server.py             # OCR API server (copy to ~/services/ocr-api/)
 ├── scripts/
 │   ├── compare_ocr.py        # OCR comparison tool
-│   ├── extract_ocr_text.py   # OCR backup/export
-│   └── test_single_file.py   # Single file testing
+│   └── extract_ocr_text.py   # OCR backup/export
 └── data/
     ├── processing.db         # State database (git-ignored)
     └── backups/              # File backups (git-ignored)
