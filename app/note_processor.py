@@ -129,6 +129,7 @@ def convert_ocr_to_supernote_format(
     words = []
 
     # Vision Framework returns word-level text blocks with bboxes in pixels
+    # bbox format: [left, top, right, bottom] in pixels
     # No resizing or scaling needed since we use full resolution
     for i, block in enumerate(ocr_result.text_blocks):
         text = block.text.strip()
@@ -139,10 +140,11 @@ def convert_ocr_to_supernote_format(
         left, top, right, bottom = block.bbox
 
         # Convert to Supernote format: {x, y, width, height}
-        x = left
-        y = top
-        width = right - left
-        height = bottom - top
+        # Supernote uses floats (e.g., 121.6, 254.27)
+        x = float(left)
+        y = float(top)
+        width = float(right - left)
+        height = float(bottom - top)
 
         # Each block from Vision is already a word (or word group)
         words.append({
