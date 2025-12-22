@@ -34,12 +34,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ /app/
 COPY scripts/ /app/scripts/
 COPY run-with-sync-control.sh /app/
-COPY config/crontab /etc/cron.d/ocr-cron
+COPY config/crontab /tmp/crontab.tmp
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 # Set up cron
-RUN chmod 0644 /etc/cron.d/ocr-cron \
-    && chmod +x /app/scripts/*.sh /app/run-with-sync-control.sh \
-    && crontab /etc/cron.d/ocr-cron \
+RUN chmod +x /app/scripts/*.sh /app/run-with-sync-control.sh /docker-entrypoint.sh \
+    && crontab /tmp/crontab.tmp \
+    && rm /tmp/crontab.tmp \
     && touch /var/log/cron.log
 
 # Create non-root user for security (but run cron as root since it needs docker access)
@@ -51,5 +52,5 @@ RUN useradd --create-home --shell /bin/bash appuser \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Default command - run cron in foreground
-CMD ["cron", "-f", "-L", "15"]
+# Default command - run entrypoint script
+CMD ["/docker-entrypoint.sh"]

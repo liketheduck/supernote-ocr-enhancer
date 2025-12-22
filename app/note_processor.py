@@ -144,22 +144,52 @@ def convert_ocr_to_supernote_format(
         left, top, right, bottom = block.bbox
 
         # Scale to original image coordinates
-        x = left * scale_x
-        y = top * scale_y
-        width = (right - left) * scale_x
-        height = (bottom - top) * scale_y
+        block_x = left * scale_x
+        block_y = top * scale_y
+        block_width = (right - left) * scale_x
+        block_height = (bottom - top) * scale_y
 
-        words.append({
-            "bounding-box": {
-                "x": round(x, 2),
-                "y": round(y, 2),
-                "width": round(width, 2),
-                "height": round(height, 2)
-            },
-            "label": block.text
-        })
+        # Split text block into individual words
+        block_text = block.text.rstrip('\n')
+        individual_words = block_text.split()
 
-        # Add space after each block (except for newlines)
+        if not individual_words:
+            continue
+
+        # Calculate total character count (including spaces)
+        total_chars = len(block_text)
+
+        # Estimate bounding box for each word
+        char_offset = 0
+        for i, word in enumerate(individual_words):
+            word_len = len(word)
+
+            # Estimate word's horizontal position within the block
+            # Assume uniform character width distribution
+            word_start_ratio = char_offset / total_chars if total_chars > 0 else 0
+            word_end_ratio = (char_offset + word_len) / total_chars if total_chars > 0 else 1
+
+            word_x = block_x + (block_width * word_start_ratio)
+            word_width = block_width * (word_end_ratio - word_start_ratio)
+
+            words.append({
+                "bounding-box": {
+                    "x": round(word_x, 2),
+                    "y": round(block_y, 2),
+                    "width": round(word_width, 2),
+                    "height": round(block_height, 2)
+                },
+                "label": word
+            })
+
+            # Add space after word (except last word in block)
+            if i < len(individual_words) - 1:
+                words.append({"label": " "})
+                char_offset += word_len + 1  # +1 for the space
+            else:
+                char_offset += word_len
+
+        # Add space after each block (for block separation)
         if not block.text.endswith('\n'):
             words.append({"label": " "})
 

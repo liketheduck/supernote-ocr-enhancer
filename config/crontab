@@ -1,7 +1,8 @@
-# TEST: Run 1 minute from now (minute 32 15)
-32 15 * * * /app/scripts/cron-ocr-job.sh
+# Set PATH and SHELL for cron jobs
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SHELL=/bin/bash
 
-# Hourly OCR processing (disabled during test)
-# 0 * * * * /app/scripts/cron-ocr-job.sh
+# Hourly OCR processing - runs at the top of every hour
+0 * * * * /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end

@@ -5,13 +5,22 @@
 # Or create a symlink: ln -s .env.local .env
 
 services:
-  supernote-ocr-enhancer:
+  ocr-enhancer:
+    image: supernote-ocr-enhancer:latest
     build:
       context: .
       dockerfile: Dockerfile
     container_name: supernote-ocr-enhancer
     restart: unless-stopped  # Keep running for cron jobs
+    deploy:
+      resources:
+        limits:
+          memory: 512M        # Hard limit - container will be killed if exceeded
+        reservations:
+          memory: 200M        # Soft reservation - guaranteed minimum
     environment:
+      # Container timezone (matches host for cron scheduling)
+      - TZ=America/New_York
       # OCR API endpoint (host machine)
       - OCR_API_URL=http://host.docker.internal:8100
       # Processing settings
