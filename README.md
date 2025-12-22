@@ -1,6 +1,6 @@
 # Supernote OCR Enhancer
 
-Docker container that processes Supernote `.note` files using a local MLX-VLM OCR API to replace Supernote's built-in OCR (~27% word error rate) with high-quality Qwen2.5-VL OCR (~5% word error rate).
+Docker container that processes Supernote `.note` files using Apple Vision Framework OCR to replace Supernote's built-in OCR (~27% word error rate) with high-quality Vision Framework OCR (~5% word error rate) and pixel-perfect bounding boxes for search highlighting.
 
 ## Architecture
 
@@ -10,11 +10,11 @@ Docker container that processes Supernote `.note` files using a local MLX-VLM OC
 │                                                                      │
 │  ┌────────────────────────┐      ┌───────────────────────────────┐  │
 │  │  supernote-ocr-        │      │  ocr-api (native macOS)       │  │
-│  │  enhancer (Docker)     │─────▶│  MLX-VLM + Qwen2.5-VL-7B     │  │
+│  │  enhancer (Docker)     │─────▶│  Apple Vision Framework      │  │
 │  │                        │      │  localhost:8100               │  │
 │  │  - Extracts pages      │      │                               │  │
-│  │  - Tracks state (SQLite)│     │  - GPU-accelerated (Metal)   │  │
-│  │  - Injects OCR back    │      │  - Returns text + bboxes     │  │
+│  │  - Tracks state (SQLite)│     │  - Native macOS OCR          │  │
+│  │  - Injects OCR back    │      │  - Word-level bboxes         │  │
 │  └──────────┬─────────────┘      └───────────────────────────────┘  │
 │             │                                                        │
 │             ▼                                                        │
@@ -27,12 +27,12 @@ Docker container that processes Supernote `.note` files using a local MLX-VLM OC
 
 ## Features
 
-- **High-quality OCR**: Replaces Supernote's ~27% WER with Qwen2.5-VL's ~5% WER
-- **Bounding box preservation**: OCR text is positioned correctly in the original document
+- **High-quality OCR**: Replaces Supernote's ~27% WER with Apple Vision Framework's ~5% WER
+- **Accurate bounding boxes**: Word-level bounding boxes enable search highlighting on device
 - **Smart tracking**: SQLite database tracks file hashes to avoid reprocessing unchanged files
 - **Backup protection**: Creates timestamped backups before modifying any file
 - **Sync server coordination**: Optionally stops Supernote sync server during processing to prevent conflicts
-- **Disables device re-OCR**: Sets `FILE_RECOGN_TYPE=0` to prevent device from overwriting enhanced OCR
+- **Proper coordinate system**: Uses device's native coordinate system (PNG pixels ÷ 11.9) for perfect highlighting
 
 ## Prerequisites
 
@@ -166,11 +166,38 @@ curl http://localhost:8100/health
 
 1. **Scan**: Finds all `.note` files in the data directory
 2. **Track**: Uses SQLite to track file/page hashes and avoid reprocessing
-3. **Extract**: Converts each page to PNG using supernotelib
-4. **OCR**: Sends images to MLX-VLM API for text recognition with bounding boxes
-5. **Scale**: Converts OCR coordinates from resized image to original dimensions
-6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block
-7. **Disable re-OCR**: Sets `FILE_RECOGN_TYPE=0` to prevent device from redoing OCR
+3. **Extract**: Converts each page to PNG (1920x2560) using supernotelib
+4. **OCR**: Sends full-resolution images to Apple Vision Framework via OCR API for word-level text recognition with pixel-accurate bounding boxes
+5. **Transform**: Converts Vision Framework coordinates (PNG pixels) to Supernote's coordinate system (PNG pixels ÷ 11.9)
+6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block with proper coordinate format
+7. **Enable highlighting**: Sets `FILE_RECOGN_TYPE=1` and `FILE_RECOGN_LANGUAGE=en_US` so device uses OCR for search highlighting
+
+### Critical: Supernote Coordinate System Discovery
+
+**The Problem**: Search highlighting wasn't working - highlights appeared in wrong positions or not at all.
+
+**The Solution**: By analyzing a device-generated OCR file, we discovered Supernote uses a scaled coordinate system:
+- **Vision Framework returns**: Bounding boxes in PNG pixel coordinates (e.g., x=420, y=711)
+- **Supernote expects**: Coordinates in a scaled system = **PNG pixels ÷ 11.9** (e.g., x=35.34, y=59.72)
+
+**Why 11.9?** Empirically determined by comparing device OCR coordinates to Vision Framework coordinates for the same text. The ratio is consistently ~11.9x.
+
+**Example transformation**:
+```python
+# Vision Framework output (pixels)
+bbox = [420.47, 710.70, 963.73, 900.47]  # [left, top, right, bottom]
+
+# Convert to Supernote format
+x = 420.47 / 11.9 = 35.33
+y = 710.70 / 11.9 = 59.72
+width = (963.73 - 420.47) / 11.9 = 45.65
+height = (900.47 - 710.70) / 11.9 = 15.95
+
+# Supernote format
+{"bounding-box": {"x": 35.33, "y": 59.72, "width": 45.65, "height": 15.95}, "label": "word"}
+```
+
+This transformation is **critical** for search highlighting to work correctly on the device.
 
 ## Supernote Cloud / Sync Server
 

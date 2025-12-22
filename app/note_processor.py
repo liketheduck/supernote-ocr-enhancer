@@ -123,28 +123,33 @@ def convert_ocr_to_supernote_format(
         "type": "Text"
     }
 
-    Note: Supernote coordinates are in absolute pixels of the original image.
-    Vision Framework OCR already provides word-level bboxes in pixels.
+    CRITICAL: Supernote uses a scaled coordinate system!
+    - Vision Framework returns bboxes in PNG pixels (e.g., x=420, y=711)
+    - Supernote expects coordinates divided by 11.9 (e.g., x=35.3, y=59.7)
+    - This scaling factor was empirically determined by comparing device OCR to Vision OCR
+    - Without this scaling, search highlighting appears in wrong positions
     """
+    # Supernote coordinate scaling factor (discovered via device OCR analysis)
+    SUPERNOTE_SCALE_FACTOR = 11.9
+
     words = []
 
-    # Vision Framework returns word-level text blocks with bboxes in pixels
+    # Vision Framework returns word-level text blocks with bboxes in PNG pixels
     # bbox format: [left, top, right, bottom] in pixels
-    # No resizing or scaling needed since we use full resolution
     for i, block in enumerate(ocr_result.text_blocks):
         text = block.text.strip()
         if not text:
             continue
 
-        # bbox format: [left, top, right, bottom] in pixels
+        # bbox format: [left, top, right, bottom] in PNG pixels
         left, top, right, bottom = block.bbox
 
-        # Convert to Supernote format: {x, y, width, height}
-        # Supernote uses floats (e.g., 121.6, 254.27)
-        x = float(left)
-        y = float(top)
-        width = float(right - left)
-        height = float(bottom - top)
+        # Convert to Supernote's scaled coordinate system
+        # Divide by 11.9 to match device's native coordinate system
+        x = float(left) / SUPERNOTE_SCALE_FACTOR
+        y = float(top) / SUPERNOTE_SCALE_FACTOR
+        width = float(right - left) / SUPERNOTE_SCALE_FACTOR
+        height = float(bottom - top) / SUPERNOTE_SCALE_FACTOR
 
         # Each block from Vision is already a word (or word group)
         words.append({
@@ -256,17 +261,17 @@ def pack_pages_with_recognition(builder, notebook, offset=0):
         builder.append(f'PAGE{page_number}/metadata', page_metadata_block)
 
 
-def reconstruct_with_recognition(notebook: sn.Notebook, disable_realtime_recognition: bool = True) -> bytes:
+def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: bool = True) -> bytes:
     """
     Reconstruct a notebook binary with recognition data.
 
     This is a modified version of sn.reconstruct() that properly
-    includes recognition text blocks.
+    includes recognition text blocks and enables search highlighting.
 
     Args:
         notebook: The notebook to reconstruct
-        disable_realtime_recognition: If True, set FILE_RECOGN_TYPE to '0' to prevent
-            the Supernote device from redoing OCR on device (overwriting our enhanced OCR)
+        enable_highlighting: If True, set FILE_RECOGN_TYPE to '1' to enable
+            search highlighting on device (default: True)
     """
     expected_signature = parser.SupernoteXParser.SN_SIGNATURES[-1]
     metadata = notebook.get_metadata()
@@ -277,17 +282,18 @@ def reconstruct_with_recognition(notebook: sn.Notebook, disable_realtime_recogni
             f'({metadata.signature} != {expected_signature})'
         )
 
-    # Set recognition language and type
+    # Set recognition language and type (both required for highlighting)
     if hasattr(metadata, 'header') and isinstance(metadata.header, dict):
         # Set language to en_US (required for device to use OCR data)
-        if metadata.header.get('FILE_RECOGN_LANGUAGE') == 'none':
-            logger.info("Setting recognition language (FILE_RECOGN_LANGUAGE: none -> en_US)")
+        if metadata.header.get('FILE_RECOGN_LANGUAGE') != 'en_US':
+            logger.info("Setting recognition language (FILE_RECOGN_LANGUAGE -> en_US)")
             metadata.header['FILE_RECOGN_LANGUAGE'] = 'en_US'
 
-        # Disable real-time recognition to prevent device from redoing OCR
-        if disable_realtime_recognition and metadata.header.get('FILE_RECOGN_TYPE') == '1':
-            logger.info("Disabling real-time recognition (FILE_RECOGN_TYPE: 1 -> 0)")
-            metadata.header['FILE_RECOGN_TYPE'] = '0'
+        # Enable recognition for search highlighting
+        # TYPE=1 allows device to use OCR data for highlighting
+        if enable_highlighting:
+            logger.info("Enabling search highlighting (FILE_RECOGN_TYPE -> 1)")
+            metadata.header['FILE_RECOGN_TYPE'] = '1'
 
     builder = manip.NotebookBuilder()
     manip._pack_type(builder, notebook)
