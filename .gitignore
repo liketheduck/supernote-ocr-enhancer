@@ -61,3 +61,20 @@ scripts/test_*.py
 
 # Development/personal instruction files (contain paths)
 supernote-ocr-enhancer-instructions.md
+
+# Debug/development scripts with hard-coded paths
+debug_ocr.py
+data/check_original_ocr.py
+data/compare_formats.py
+data/debug_ocr.py
+data/COMMON_BOOK_FLAG_TEST.md
+data/FINAL_OCR_COMPARISON_REPORT.md
+data/FLAG_TEST_MATRIX.md
+scripts/create_test_variants.py
+scripts/diagnose_bbox.py
+scripts/modify_recogn_flags.py
+app/create_flag_test_variants.py
+app/examine_note_flags.py
+
+# Usability report (generated, contains analysis)
+USABILITY_REPORT.md

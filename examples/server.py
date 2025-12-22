@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-MLX-VLM OCR API Server
-Provides API for handwriting OCR with bounding boxes.
+OCR API Server with Apple Vision Framework
+Provides fast, accurate OCR with word-level bounding boxes.
 Optimized for Apple Silicon (M1/M2/M3/M4).
 
-Usage:
-    # 7B model (better accuracy, ~8GB RAM, ~60-120s/page)
-    OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-7B-Instruct-8bit uv run python server.py
+Primary endpoint: /ocr/vision (Apple Vision Framework - fast, recommended)
+Optional endpoint: /ocr (Qwen2.5-VL via MLX-VLM - slower but more accurate)
 
-    # 3B model (faster, ~4GB RAM, ~20-40s/page)
-    OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-3B-Instruct-8bit uv run python server.py
+Usage:
+    # Start server (Vision OCR always available)
+    uv run python server.py
+
+    # With optional Qwen model for /ocr endpoint
+    OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-7B-Instruct-8bit uv run python server.py
 """
 
 import os
@@ -23,15 +26,28 @@ from pathlib import Path
 from typing import Optional, Any
 from contextlib import asynccontextmanager
 
-import mlx.core as mx
-from mlx_vlm import load, generate
-from mlx_vlm.prompt_utils import apply_chat_template
-from mlx_vlm.utils import load_config
 from PIL import Image
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+# Apple Vision Framework OCR (required)
+try:
+    from ocrmac.ocrmac import OCR as VisionOCR
+    VISION_AVAILABLE = True
+except ImportError:
+    VISION_AVAILABLE = False
+
+# MLX-VLM for optional Qwen models (optional)
+try:
+    import mlx.core as mx
+    from mlx_vlm import load, generate
+    from mlx_vlm.prompt_utils import apply_chat_template
+    from mlx_vlm.utils import load_config
+    MLX_AVAILABLE = True
+except ImportError:
+    MLX_AVAILABLE = False
 
 # Configuration via environment variables
 MODEL_PATH = os.getenv("OCR_MODEL_PATH", "mlx-community/Qwen2.5-VL-7B-Instruct-8bit")
@@ -53,6 +69,14 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("ocr-api")
+
+# Log availability
+if not VISION_AVAILABLE:
+    logger.warning("ocrmac not installed - Vision Framework OCR (/ocr/vision) will be disabled")
+    logger.warning("Install with: uv add ocrmac")
+if not MLX_AVAILABLE:
+    logger.info("mlx-vlm not installed - Qwen OCR (/ocr) will be disabled")
+    logger.info("Install with: uv add mlx-vlm (optional, for slower but more accurate OCR)")
 
 # Global model reference
 model = None
@@ -152,31 +176,41 @@ async def lifespan(app: FastAPI):
     """Load model on startup, cleanup on shutdown"""
     global model, processor, config
 
-    logger.info(f"Loading model: {MODEL_PATH}")
-    load_start = time.time()
+    # Log what's available
+    logger.info(f"Vision Framework OCR: {'available' if VISION_AVAILABLE else 'NOT available'}")
+    logger.info(f"MLX-VLM (Qwen) OCR: {'available' if MLX_AVAILABLE else 'NOT available'}")
 
-    try:
-        model, processor = load(MODEL_PATH)
-        config = load_config(MODEL_PATH)
-        load_time = time.time() - load_start
-        logger.info(f"Model loaded successfully in {load_time:.2f}s")
-    except Exception as e:
-        logger.error(f"Failed to load model: {e}")
-        raise
+    # Load MLX model if available and requested
+    if MLX_AVAILABLE:
+        logger.info(f"Loading MLX model: {MODEL_PATH}")
+        load_start = time.time()
+        try:
+            model, processor = load(MODEL_PATH)
+            config = load_config(MODEL_PATH)
+            load_time = time.time() - load_start
+            logger.info(f"MLX model loaded successfully in {load_time:.2f}s")
+        except Exception as e:
+            logger.warning(f"Failed to load MLX model: {e}")
+            logger.warning("Qwen OCR (/ocr) will be unavailable, but Vision OCR (/ocr/vision) still works")
+
+    if not VISION_AVAILABLE and not MLX_AVAILABLE:
+        logger.error("No OCR backends available! Install ocrmac or mlx-vlm")
 
     yield
 
     # Cleanup
     logger.info("Shutting down OCR API server")
-    del model
-    del processor
-    mx.metal.clear_cache()
+    if model is not None:
+        del model
+        del processor
+    if MLX_AVAILABLE:
+        mx.metal.clear_cache()
 
 
 app = FastAPI(
-    title="MLX-VLM OCR API",
-    description="Handwriting OCR with bounding boxes using Qwen2.5-VL on Apple Silicon",
-    version="1.0.0",
+    title="OCR API Server",
+    description="Apple Vision Framework OCR with optional Qwen2.5-VL support",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -235,21 +269,27 @@ def run_ocr(image: Image.Image, prompt: str, max_tokens: int, temperature: float
     return output
 
 
-@app.get("/health", response_model=HealthResponse)
+@app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return HealthResponse(
-        status="healthy" if model is not None else "unhealthy",
-        model_loaded=model is not None,
-        model_name=MODEL_PATH,
-        uptime_seconds=time.time() - start_time
-    )
+    # Server is healthy if at least one OCR backend is available
+    is_healthy = VISION_AVAILABLE or (model is not None)
+    return {
+        "status": "healthy" if is_healthy else "unhealthy",
+        "vision_available": VISION_AVAILABLE,
+        "mlx_model_loaded": model is not None,
+        "model_name": MODEL_PATH if model is not None else None,
+        "uptime_seconds": time.time() - start_time
+    }
 
 
 @app.post("/ocr", response_model=OCRResponse)
 async def ocr_endpoint(request: OCRRequest):
     """
-    Perform OCR on an image.
+    Perform OCR on an image using Qwen2.5-VL (MLX-VLM).
+
+    This is the slower but more accurate OCR option.
+    Requires mlx-vlm to be installed.
 
     Args:
         request: OCRRequest with image (base64 or URL) and prompt configuration
@@ -257,6 +297,11 @@ async def ocr_endpoint(request: OCRRequest):
     Returns:
         OCRResponse with extracted text and bounding boxes
     """
+    if not MLX_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="MLX-VLM not installed. Use /ocr/vision for Apple Vision OCR, or install mlx-vlm: uv add mlx-vlm"
+        )
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
@@ -369,16 +414,98 @@ async def ocr_upload(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/ocr/vision")
+async def ocr_vision(request: OCRRequest):
+    """
+    Perform OCR using Apple Vision Framework.
+
+    This is the fast, recommended OCR option for batch processing.
+    Returns word-level bounding boxes with high accuracy.
+
+    Args:
+        request: OCRRequest with image (base64 or URL)
+
+    Returns:
+        Word-level text with accurate bounding boxes in pixels
+    """
+    if not VISION_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Vision Framework OCR not available. Install ocrmac: uv add ocrmac"
+        )
+
+    start = time.time()
+
+    try:
+        # Decode image
+        image = decode_image(request.image_base64, request.image_url)
+        logger.info(f"Processing image with Vision Framework: {image.size[0]}x{image.size[1]}")
+
+        # Run Vision Framework OCR
+        # recognize(px=True) returns list of tuples: (text, confidence, bbox)
+        # bbox is (x_min, y_min, x_max, y_max) in pixels
+        annotations = VisionOCR(image, recognition_level='accurate').recognize(px=True)
+
+        # Parse Vision Framework results
+        text_blocks = []
+        full_text_parts = []
+
+        for text, confidence, bbox_tuple in annotations:
+            if not text.strip():
+                continue
+
+            # bbox_tuple is (x_min, y_min, x_max, y_max) in pixels
+            x_min, y_min, x_max, y_max = bbox_tuple
+
+            text_blocks.append({
+                "text": text,
+                "bbox": [x_min, y_min, x_max, y_max],
+                "confidence": confidence,
+                "type": "vision_ocr"
+            })
+
+            full_text_parts.append(text)
+
+        result = {
+            "text_blocks": text_blocks,
+            "full_text": " ".join(full_text_parts),
+            "image_width": image.size[0],
+            "image_height": image.size[1]
+        }
+
+        processing_time = (time.time() - start) * 1000
+        logger.info(f"Vision OCR completed in {processing_time:.2f}ms, found {len(text_blocks)} text blocks")
+
+        return OCRResponse(
+            result=result,
+            processing_time_ms=processing_time,
+            model="Apple Vision Framework",
+            prompt_type="vision_ocr"
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Vision OCR processing failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/prompts")
 async def list_prompts():
-    """List available prompt types"""
+    """List available prompt types and OCR backends"""
     return {
         "available_prompts": list(PROMPTS.keys()),
         "descriptions": {
-            "ocr_with_boxes": "Full OCR with bounding boxes as JSON (recommended for Supernote)",
-            "ocr_simple": "Simple text extraction, markdown output",
-            "ocr_layout": "Layout-aware OCR with reading order"
-        }
+            "ocr_with_boxes": "Full OCR with bounding boxes as JSON (for /ocr endpoint)",
+            "ocr_simple": "Simple text extraction, markdown output (for /ocr endpoint)",
+            "ocr_layout": "Layout-aware OCR with reading order (for /ocr endpoint)"
+        },
+        "endpoints": {
+            "/ocr/vision": "Apple Vision Framework - fast (0.8s/page), recommended for batch processing",
+            "/ocr": "Qwen2.5-VL via MLX-VLM - slow (60-120s/page), best accuracy"
+        },
+        "vision_available": VISION_AVAILABLE,
+        "mlx_available": MLX_AVAILABLE and model is not None
     }
 
 

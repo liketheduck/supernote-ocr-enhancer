@@ -378,6 +378,55 @@ class Database:
         finally:
             conn.close()
 
+    def get_all_file_paths(self) -> List[str]:
+        """Get all file paths in the database."""
+        conn = self._get_connection()
+        try:
+            rows = conn.execute("SELECT file_path FROM note_files").fetchall()
+            return [row['file_path'] for row in rows]
+        finally:
+            conn.close()
+
+    def purge_missing_files(self, existing_paths: set) -> int:
+        """
+        Remove database records for files that no longer exist on disk.
+
+        Args:
+            existing_paths: Set of file paths that currently exist
+
+        Returns:
+            Number of records removed
+        """
+        conn = self._get_connection()
+        try:
+            # Get all paths in database
+            rows = conn.execute("SELECT id, file_path FROM note_files").fetchall()
+
+            # Find orphans
+            orphan_ids = []
+            for row in rows:
+                if row['file_path'] not in existing_paths:
+                    orphan_ids.append(row['id'])
+
+            if orphan_ids:
+                # Delete page processing records first (foreign key)
+                placeholders = ','.join('?' * len(orphan_ids))
+                conn.execute(
+                    f"DELETE FROM page_processing WHERE note_file_id IN ({placeholders})",
+                    orphan_ids
+                )
+                # Delete note file records
+                conn.execute(
+                    f"DELETE FROM note_files WHERE id IN ({placeholders})",
+                    orphan_ids
+                )
+                conn.commit()
+                logger.info(f"Purged {len(orphan_ids)} stale database records for deleted files")
+
+            return len(orphan_ids)
+        finally:
+            conn.close()
+
 
 def compute_file_hash(file_path: Path) -> str:
     """Compute SHA-256 hash of file contents."""

@@ -42,6 +42,9 @@ services:
       - ./data:/app/data
       # Docker socket for sync server control (optional)
       - /var/run/docker.sock:/var/run/docker.sock
+      # Sync server files for cron job coordination (mount at same paths)
+      - ${SYNC_SERVER_COMPOSE:-/dev/null}:${SYNC_SERVER_COMPOSE:-/tmp/no-sync-compose}:ro
+      - ${SYNC_SERVER_ENV:-/dev/null}:${SYNC_SERVER_ENV:-/tmp/no-sync-env}:ro
     env_file:
       - .env.local
     extra_hosts:

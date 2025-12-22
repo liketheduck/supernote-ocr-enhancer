@@ -27,19 +27,33 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 
 ## Features
 
-- **High-quality OCR**: Replaces Supernote's ~27% WER with Apple Vision Framework's ~5% WER
+- **High-quality OCR**: Replaces Supernote's built-in OCR with Apple Vision Framework (+41.8% more text captured)
+- **Fast processing**: 0.8 seconds per page average (150x faster than Qwen2.5-VL)
 - **Accurate bounding boxes**: Word-level bounding boxes enable search highlighting on device
 - **Smart tracking**: SQLite database tracks file hashes to avoid reprocessing unchanged files
 - **Backup protection**: Creates timestamped backups before modifying any file
 - **Sync server coordination**: Optionally stops Supernote sync server during processing to prevent conflicts
 - **Proper coordinate system**: Uses device's native coordinate system (PNG pixels ÷ 11.9) for perfect highlighting
+- **Battery-friendly**: TYPE='0' configuration prevents device from re-OCRing after pen strokes
+
+## Performance
+
+**Production test results** (111 files, 303 pages):
+- **Processing time**: 4.1 minutes total
+- **Speed**: 0.8 seconds per page average, 2.2 seconds per file
+- **Success rate**: 96.5% (111/115 files completed)
+- **Accuracy**: +41.8% more text captured vs Supernote device OCR
+- **vs Qwen2.5-VL 7B**: 150x faster, 31.5% less text (optimal trade-off for batch processing)
+
+See [FINAL_OCR_COMPARISON_REPORT.md](data/FINAL_OCR_COMPARISON_REPORT.md) for detailed accuracy analysis.
 
 ## Prerequisites
 
-1. **Apple Silicon Mac** (M1/M2/M3/M4) with 16GB+ RAM
-2. **Docker Desktop** installed
-3. **MLX-VLM OCR API** running locally (see [OCR API Setup](#ocr-api-setup))
-4. **Supernote .note files** synced to your Mac
+1. **Apple Silicon Mac** (M1/M2/M3/M4) - Required for Apple Vision Framework
+2. **macOS 13+ (Ventura or later)** - Required for Vision Framework OCR
+3. **Docker Desktop** installed
+4. **OCR API server** running locally (see [OCR API Setup](#ocr-api-setup))
+5. **Supernote .note files** synced to your Mac
 
 ## Quick Start
 
@@ -79,15 +93,17 @@ You need a local MLX-VLM OCR API running. See [OCR API Setup](#ocr-api-setup) be
 
 ### 4. Run OCR Enhancement
 
-**Simple run** (process all files once):
+**If you DON'T use a Supernote sync server** (manual file transfer):
 ```bash
-docker compose run --rm supernote-ocr-enhancer
+docker compose run --rm ocr-enhancer python /app/main.py
 ```
 
-**With sync server coordination** (recommended if using Supernote sync):
+**If you USE a Supernote sync server** (REQUIRED to prevent file corruption):
 ```bash
 ./run-with-sync-control.sh
 ```
+
+> **WARNING**: Running OCR enhancement while the sync server is active can corrupt your .note files. The `run-with-sync-control.sh` script automatically stops the sync server, runs OCR, syncs the database, and restarts the server.
 
 **Dry run** (see what would happen):
 ```bash
@@ -96,7 +112,7 @@ docker compose run --rm supernote-ocr-enhancer
 
 ## OCR API Setup
 
-The OCR API is a separate service that runs **natively on macOS** (not in Docker) to leverage Metal GPU acceleration. You must set this up before running the enhancer.
+The OCR API is a separate service that runs **natively on macOS** (not in Docker) to access Apple's Vision Framework. You must set this up before running the enhancer.
 
 ### Using uv (recommended)
 
@@ -107,48 +123,69 @@ cd ~/services/ocr-api
 
 # Initialize with uv
 uv init --name ocr-api --python 3.11
-uv add mlx-vlm pillow fastapi uvicorn python-multipart
+
+# Install dependencies
+# CRITICAL: ocrmac is required for Apple Vision Framework OCR
+uv add ocrmac pillow fastapi uvicorn python-multipart
+
+# Optional: Add mlx-vlm for Qwen2.5-VL OCR (slower but more accurate)
+# uv add mlx-vlm
 
 # Copy server.py from this repo
 cp /path/to/supernote-ocr-enhancer/examples/server.py .
 
-# Start with 7B model (recommended - better accuracy)
+# Create logs directory
+mkdir -p logs
+
+# Start the server
 uv run python server.py
-
-# OR start with 3B model (faster, less RAM)
-OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-3B-Instruct-8bit uv run python server.py
 ```
 
-### Model Selection: 7B vs 3B
+### What Gets Installed
 
-Both models dramatically improve on Supernote's built-in OCR (~27% word error rate):
+| Package | Purpose | Required? |
+|---------|---------|-----------|
+| `ocrmac` | Apple Vision Framework OCR with word-level bounding boxes | **Yes** |
+| `pillow` | Image processing | **Yes** |
+| `fastapi` | REST API server | **Yes** |
+| `uvicorn` | ASGI server | **Yes** |
+| `python-multipart` | File upload support | **Yes** |
+| `mlx-vlm` | Qwen2.5-VL models (optional, for `/ocr` endpoint) | No |
 
-| Model | RAM | Speed | Accuracy | Improvement over Supernote |
-|-------|-----|-------|----------|----------------------------|
-| **7B** (default) | ~8GB | ~60-120s/page | ~5% WER | **5x better** |
-| **3B** | ~4GB | ~20-40s/page | ~8-10% WER | ~3x better |
-
-**Recommendation**: Use **7B** unless you're RAM-constrained or batch-processing hundreds of pages. The 3B model is faster but makes more errors on messy handwriting, abbreviations, and edge cases.
-
-Set via environment variable:
-```bash
-# 7B model (default)
-export OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-7B-Instruct-8bit
-
-# 3B model (faster)
-export OCR_MODEL_PATH=mlx-community/Qwen2.5-VL-3B-Instruct-8bit
-```
-
-The server will:
-1. Download the selected model (first run only: ~9GB for 7B, ~4GB for 3B)
-2. Start listening on `http://localhost:8100`
-3. Provide `/ocr` endpoint for image OCR with bounding boxes
-
-### Health Check
+### Verify Installation
 
 ```bash
+# Check if server is running
 curl http://localhost:8100/health
+
+# Check available endpoints
+curl http://localhost:8100/prompts
 ```
+
+The `/prompts` endpoint will show `"vision_available": true` if `ocrmac` is properly installed.
+
+### OCR Endpoints
+
+| Endpoint | OCR Engine | Speed | Accuracy | Use Case |
+|----------|------------|-------|----------|----------|
+| `/ocr/vision` | Apple Vision Framework | **0.8s/page** | Good (+41.8% vs Supernote) | **Default - batch processing** |
+| `/ocr` | Qwen2.5-VL 7B (requires mlx-vlm) | 60-120s/page | Best (+107% vs Supernote) | Single files needing max accuracy |
+
+This project uses `/ocr/vision` by default for its speed advantage.
+
+### Troubleshooting ocrmac
+
+If Vision OCR isn't working:
+
+```bash
+# Verify ocrmac is installed
+uv run python -c "from ocrmac.ocrmac import OCR; print('ocrmac OK')"
+
+# If you get import errors, try reinstalling
+uv remove ocrmac && uv add ocrmac
+```
+
+`ocrmac` requires macOS 10.15+ and works best on macOS 13+ (Ventura).
 
 ## Configuration
 
@@ -170,7 +207,27 @@ curl http://localhost:8100/health
 4. **OCR**: Sends full-resolution images to Apple Vision Framework via OCR API for word-level text recognition with pixel-accurate bounding boxes
 5. **Transform**: Converts Vision Framework coordinates (PNG pixels) to Supernote's coordinate system (PNG pixels ÷ 11.9)
 6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block with proper coordinate format
-7. **Enable highlighting**: Sets `FILE_RECOGN_TYPE=1` and `FILE_RECOGN_LANGUAGE=en_US` so device uses OCR for search highlighting
+7. **Enable highlighting**: Sets `FILE_RECOGN_TYPE=0` and `FILE_RECOGN_LANGUAGE=en_US` so device uses OCR for search highlighting while preserving our enhanced OCR
+
+### Critical: FILE_RECOGN_TYPE='0' vs '1'
+
+**The Discovery**: Through comprehensive testing, we discovered that `FILE_RECOGN_TYPE='0'` is the optimal setting:
+
+| Setting | Highlighting Works? | Device Re-OCRs? | Battery Impact | Our Choice |
+|---------|---------------------|-----------------|----------------|------------|
+| TYPE='0' | ✅ Yes | ❌ No | Low (no re-OCR) | **✅ Default** |
+| TYPE='1' | ✅ Yes | ✅ Yes | High (re-OCRs after pen strokes) | ❌ Not used |
+
+**Why TYPE='0'?**
+1. **Preserves our OCR**: Device doesn't overwrite Vision Framework OCR with its lower-quality OCR (~27% WER)
+2. **Saves battery**: Device doesn't re-run OCR after every pen stroke
+3. **Highlighting still works**: Search highlighting is fully functional
+4. **Trade-off**: Device must sync to computer before search highlighting updates (acceptable for our use case)
+
+**Testing revealed**:
+- `LANG='none'` causes "redownload language" prompt (never use)
+- `LANG=''` (empty) works but provides no benefit over `LANG='en_US'`
+- `RECOGNSTATUS` value doesn't affect device behavior (new pen strokes always trigger OCR with TYPE='1')
 
 ### Critical: Supernote Coordinate System Discovery
 
@@ -230,7 +287,7 @@ SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
 
 If not using a sync server, leave these blank and run directly:
 ```bash
-docker compose run --rm supernote-ocr-enhancer
+docker compose run --rm ocr-enhancer python /app/main.py
 ```
 
 ## Processing State & File Tracking
@@ -261,12 +318,19 @@ Files are **skipped** when:
 
 ## Performance
 
+### Apple Vision Framework (Default)
+- **Speed**: ~0.8 seconds per page average
+- **Memory**: ~200MB (minimal footprint)
+- **Accuracy**: +41.8% more text vs Supernote device OCR
+
+### Qwen2.5-VL 7B (Optional, requires mlx-vlm)
 - **First page**: ~60-120 seconds (MLX kernel compilation)
 - **Subsequent pages**: ~20-100 seconds depending on content
 - **GPU**: Metal (Apple Silicon) - CPU will appear idle during processing
-- **Memory**: ~8GB for 7B model + image processing
+- **Memory**: ~8GB for 7B model
+- **Accuracy**: +107% more text vs Supernote device OCR
 
-See `data/model-comparison-7b-vs-3b.md` for 7B vs 3B model benchmarks.
+See `data/model-comparison-7b-vs-3b.md` for detailed model benchmarks.
 
 ## Troubleshooting
 
@@ -332,8 +396,9 @@ This means you can use, modify, and distribute this software, but you must:
 ## Acknowledgments
 
 - [supernotelib](https://github.com/jya-dev/supernote-tool) - Supernote .note file parsing
-- [MLX-VLM](https://github.com/Blaizzy/mlx-vlm) - Apple Silicon optimized vision-language models
-- [Qwen2.5-VL](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct) - The OCR model
+- [ocrmac](https://github.com/straussmaximilian/ocrmac) - Python wrapper for Apple Vision Framework OCR
+- [MLX-VLM](https://github.com/Blaizzy/mlx-vlm) - Apple Silicon optimized vision-language models (optional)
+- [Qwen2.5-VL](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct) - Alternative OCR model (optional)
 
 ## Contributing
 

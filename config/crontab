@@ -2,7 +2,7 @@
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SHELL=/bin/bash
 
-# Hourly OCR processing - runs at the top of every hour
-0 * * * * /app/scripts/cron-ocr-job.sh
+# Daily OCR processing - runs at midnight
+0 0 * * * /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end

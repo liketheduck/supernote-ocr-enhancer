@@ -376,6 +376,13 @@ def main():
     # Recover from any interrupted runs (stuck in 'processing' status)
     db.reset_stuck_processing()
 
+    # Purge stale records for files that no longer exist
+    existing_files = find_note_files()
+    existing_paths = {str(f) for f in existing_files}
+    purged = db.purge_missing_files(existing_paths)
+    if purged > 0:
+        logger.info(f"Cleaned up {purged} stale database records for deleted files")
+
     # Initialize OCR client
     ocr_client = OCRClient(OCR_API_URL)
 

@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (including build tools for pycairo and cron)
+# Install system dependencies (including build tools for pycairo, cron, and docker CLI)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
@@ -21,6 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2-dev \
     libfreetype6-dev \
     cron \
+    ca-certificates \
+    gnupg \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
+    && chmod a+r /etc/apt/keyrings/docker.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

@@ -4,6 +4,7 @@ Handles page extraction, OCR integration, and writing recognition data back.
 """
 
 import io
+import os
 import base64
 import json
 import logging
@@ -268,10 +269,15 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
     This is a modified version of sn.reconstruct() that properly
     includes recognition text blocks and enables search highlighting.
 
+    IMPORTANT: Uses FILE_RECOGN_TYPE='0' to preserve OCR data!
+    - TYPE='0' enables highlighting while preventing device from re-OCRing
+    - TYPE='1' would cause device to overwrite our OCR after pen strokes
+    - This saves battery life and preserves our high-quality Vision OCR
+
     Args:
         notebook: The notebook to reconstruct
-        enable_highlighting: If True, set FILE_RECOGN_TYPE to '1' to enable
-            search highlighting on device (default: True)
+        enable_highlighting: If True, set FILE_RECOGN_TYPE to '0' to enable
+            search highlighting while preventing device re-OCR (default: True)
     """
     expected_signature = parser.SupernoteXParser.SN_SIGNATURES[-1]
     metadata = notebook.get_metadata()
@@ -290,10 +296,11 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
             metadata.header['FILE_RECOGN_LANGUAGE'] = 'en_US'
 
         # Enable recognition for search highlighting
-        # TYPE=1 allows device to use OCR data for highlighting
+        # TYPE='0' enables highlighting while preventing device from re-OCRing
+        # This preserves our Vision OCR and saves battery life
         if enable_highlighting:
-            logger.info("Enabling search highlighting (FILE_RECOGN_TYPE -> 1)")
-            metadata.header['FILE_RECOGN_TYPE'] = '1'
+            logger.info("Enabling search highlighting (FILE_RECOGN_TYPE -> 0)")
+            metadata.header['FILE_RECOGN_TYPE'] = '0'
 
     builder = manip.NotebookBuilder()
     manip._pack_type(builder, notebook)
@@ -370,9 +377,20 @@ def inject_ocr_results(
     try:
         reconstructed = reconstruct_with_recognition(notebook)
 
+        # Save original timestamps before writing
+        original_stat = note_path.stat()
+        original_mtime = original_stat.st_mtime
+        original_atime = original_stat.st_atime
+
         # Write back
         with open(note_path, 'wb') as f:
             f.write(reconstructed)
+
+        # Preserve timestamp: set mtime to original + 60 seconds
+        # This keeps the file's timeline intact while indicating it was processed
+        new_mtime = original_mtime + 60  # Add 1 minute
+        os.utime(note_path, (original_atime, new_mtime))
+        logger.debug(f"Preserved timestamp: original + 60s")
 
         logger.info(f"Successfully wrote OCR data to {note_path}")
         return True
