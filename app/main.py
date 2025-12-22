@@ -200,9 +200,9 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                     pages_skipped += 1
                     continue
 
-                # Run OCR
+                # Run OCR with Vision Framework (word-level bounding boxes)
                 logger.info(f"  OCR page {page_num + 1}/{total_pages}...")
-                ocr_result = ocr_client.ocr_image(page_data.png_bytes)
+                ocr_result = ocr_client.ocr_image_vision(page_data.png_bytes)
 
                 # Store in database
                 db.store_page_result(

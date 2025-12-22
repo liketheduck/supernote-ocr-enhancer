@@ -164,6 +164,69 @@ class OCRClient:
             ocr_image_height=ocr_height
         )
 
+    def ocr_image_vision(self, image_bytes: bytes) -> OCRResult:
+        """
+        OCR using Apple Vision Framework with word-level bounding boxes.
+
+        This provides accurate word-level bounding boxes for search highlighting.
+
+        Args:
+            image_bytes: PNG image as bytes
+
+        Returns:
+            OCRResult with word-level text blocks and bounding boxes
+
+        Raises:
+            requests.RequestException: On API errors
+            ValueError: On invalid response
+        """
+        # DO NOT resize for Vision Framework - it needs full resolution for accurate bboxes
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+        # Get original image dimensions
+        img = Image.open(io.BytesIO(image_bytes))
+        orig_width, orig_height = img.size
+
+        payload = {
+            "image_base64": image_base64,
+            "prompt_type": "vision_ocr",  # Not used by vision endpoint but required
+            "max_tokens": 4096,
+            "temperature": 0.0
+        }
+
+        resp = self.session.post(
+            f"{self.base_url}/ocr/vision",
+            json=payload,
+            timeout=self.timeout
+        )
+        resp.raise_for_status()
+
+        data = resp.json()
+        result = data.get("result", {})
+
+        # Parse text blocks from Vision Framework
+        text_blocks = []
+        raw_blocks = result.get("text_blocks", [])
+
+        for block in raw_blocks:
+            # Vision returns bbox in pixels [left, top, right, bottom]
+            # We keep them as-is since they're already in pixels
+            text_blocks.append(TextBlock(
+                text=block.get("text", ""),
+                bbox=block.get("bbox", [0, 0, 0, 0]),
+                confidence=block.get("confidence", 0.0),
+                block_type="vision_ocr"
+            ))
+
+        return OCRResult(
+            text_blocks=text_blocks,
+            full_text=result.get("full_text", ""),
+            processing_time_ms=data.get("processing_time_ms", 0),
+            raw_response=data,
+            ocr_image_width=orig_width,
+            ocr_image_height=orig_height
+        )
+
     def ocr_image_simple(self, image_bytes: bytes) -> str:
         """
         Simple OCR - just get the text without bounding boxes.

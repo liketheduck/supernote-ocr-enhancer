@@ -124,73 +124,39 @@ def convert_ocr_to_supernote_format(
     }
 
     Note: Supernote coordinates are in absolute pixels of the original image.
-    OCR bbox values are pixels from the (possibly resized) OCR image.
+    Vision Framework OCR already provides word-level bboxes in pixels.
     """
     words = []
 
-    # Get OCR image dimensions (after resize) - use original if not resized
-    ocr_width = ocr_result.ocr_image_width or original_width
-    ocr_height = ocr_result.ocr_image_height or original_height
-
-    # Calculate scale factors from OCR image to original
-    scale_x = original_width / ocr_width if ocr_width > 0 else 1.0
-    scale_y = original_height / ocr_height if ocr_height > 0 else 1.0
-
-    for block in ocr_result.text_blocks:
-        if not block.text.strip():
+    # Vision Framework returns word-level text blocks with bboxes in pixels
+    # No resizing or scaling needed since we use full resolution
+    for i, block in enumerate(ocr_result.text_blocks):
+        text = block.text.strip()
+        if not text:
             continue
 
-        # bbox format: [left, top, right, bottom] in pixels of OCR image
+        # bbox format: [left, top, right, bottom] in pixels
         left, top, right, bottom = block.bbox
 
-        # Scale to original image coordinates
-        block_x = left * scale_x
-        block_y = top * scale_y
-        block_width = (right - left) * scale_x
-        block_height = (bottom - top) * scale_y
+        # Convert to Supernote format: {x, y, width, height}
+        x = left
+        y = top
+        width = right - left
+        height = bottom - top
 
-        # Split text block into individual words
-        block_text = block.text.rstrip('\n')
-        individual_words = block_text.split()
+        # Each block from Vision is already a word (or word group)
+        words.append({
+            "bounding-box": {
+                "x": round(x, 2),
+                "y": round(y, 2),
+                "width": round(width, 2),
+                "height": round(height, 2)
+            },
+            "label": text
+        })
 
-        if not individual_words:
-            continue
-
-        # Calculate total character count (including spaces)
-        total_chars = len(block_text)
-
-        # Estimate bounding box for each word
-        char_offset = 0
-        for i, word in enumerate(individual_words):
-            word_len = len(word)
-
-            # Estimate word's horizontal position within the block
-            # Assume uniform character width distribution
-            word_start_ratio = char_offset / total_chars if total_chars > 0 else 0
-            word_end_ratio = (char_offset + word_len) / total_chars if total_chars > 0 else 1
-
-            word_x = block_x + (block_width * word_start_ratio)
-            word_width = block_width * (word_end_ratio - word_start_ratio)
-
-            words.append({
-                "bounding-box": {
-                    "x": round(word_x, 2),
-                    "y": round(block_y, 2),
-                    "width": round(word_width, 2),
-                    "height": round(block_height, 2)
-                },
-                "label": word
-            })
-
-            # Add space after word (except last word in block)
-            if i < len(individual_words) - 1:
-                words.append({"label": " "})
-                char_offset += word_len + 1  # +1 for the space
-            else:
-                char_offset += word_len
-
-        # Add space after each block (for block separation)
-        if not block.text.endswith('\n'):
+        # Add space after each word (except last)
+        if i < len(ocr_result.text_blocks) - 1:
             words.append({"label": " "})
 
     recogn_data = {
