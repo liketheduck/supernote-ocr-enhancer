@@ -277,9 +277,15 @@ def reconstruct_with_recognition(notebook: sn.Notebook, disable_realtime_recogni
             f'({metadata.signature} != {expected_signature})'
         )
 
-    # Disable real-time recognition to prevent device from redoing OCR
-    if disable_realtime_recognition and hasattr(metadata, 'header') and isinstance(metadata.header, dict):
-        if metadata.header.get('FILE_RECOGN_TYPE') == '1':
+    # Set recognition language and type
+    if hasattr(metadata, 'header') and isinstance(metadata.header, dict):
+        # Set language to en_US (required for device to use OCR data)
+        if metadata.header.get('FILE_RECOGN_LANGUAGE') == 'none':
+            logger.info("Setting recognition language (FILE_RECOGN_LANGUAGE: none -> en_US)")
+            metadata.header['FILE_RECOGN_LANGUAGE'] = 'en_US'
+
+        # Disable real-time recognition to prevent device from redoing OCR
+        if disable_realtime_recognition and metadata.header.get('FILE_RECOGN_TYPE') == '1':
             logger.info("Disabling real-time recognition (FILE_RECOGN_TYPE: 1 -> 0)")
             metadata.header['FILE_RECOGN_TYPE'] = '0'
 
