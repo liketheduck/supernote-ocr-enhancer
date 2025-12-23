@@ -381,7 +381,7 @@ Add this line to your crontab:
 
 ## Supernote Cloud / Sync Server
 
-If you use a **self-hosted Supernote Cloud sync server** (like [supernote-cloud-docker](https://github.com/philips/supernote-cloud-docker)), use this mode. This is the **default** when sync server settings are configured.
+If you use a **self-hosted Supernote Cloud sync server** (like [Supernote-Private-Cloud](https://github.com/nickian/Supernote-Private-Cloud)), use this mode. This is the **default** when sync server settings are configured.
 
 ### Do I need this?
 
@@ -391,7 +391,7 @@ If you use a **self-hosted Supernote Cloud sync server** (like [supernote-cloud-
 
 ### What is the Supernote Sync Server?
 
-The [Supernote Cloud](https://github.com/philips/supernote-cloud-docker) or similar self-hosted sync server syncs .note files between your device and Mac. When this tool modifies .note files (injecting OCR), the sync server's database becomes out of sync with the filesystem, causing conflicts.
+The [Supernote Private Cloud](https://github.com/nickian/Supernote-Private-Cloud) or similar self-hosted sync server syncs .note files between your device and Mac. When this tool modifies .note files (injecting OCR), the sync server's database becomes out of sync with the filesystem, causing conflicts.
 
 ### Sync Server Coordination
 
