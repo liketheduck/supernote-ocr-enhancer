@@ -89,7 +89,7 @@ docker compose build
 
 ### 3. Start the OCR API
 
-You need a local MLX-VLM OCR API running. See [OCR API Setup](#ocr-api-setup) below.
+You need the OCR API server running locally. See [OCR API Setup](#ocr-api-setup) below.
 
 ### 4. Run OCR Enhancement
 
@@ -458,7 +458,7 @@ Files are **skipped** when:
 
 **Problem**: By default, Supernote devices have "Real-time Recognition" enabled (`FILE_RECOGN_TYPE=1` in the .note file header). This causes the device to continuously re-run its own OCR, overwriting any enhanced OCR you inject.
 
-**Solution**: When this tool processes a file, it sets `FILE_RECOGN_TYPE=0` in the notebook header. This disables on-device OCR for that specific file, preserving your enhanced Qwen2.5-VL results.
+**Solution**: When this tool processes a file, it sets `FILE_RECOGN_TYPE=0` in the notebook header. This disables on-device OCR for that specific file, preserving your enhanced Vision Framework OCR results.
 
 **Important**: This is a per-file setting. New notebooks created on your device will still have real-time recognition enabled until processed by this tool.
 
