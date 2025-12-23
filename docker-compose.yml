@@ -45,11 +45,11 @@ services:
       - ${SUPERNOTE_DATA_PATH:?Set SUPERNOTE_DATA_PATH in .env.local}:/supernote/data
       # Local persistent storage for tracking state and backups
       - ./data:/app/data
-      # Docker socket for sync server control (optional)
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Sync server files for cron job coordination (mount at same paths)
-      - ${SYNC_SERVER_COMPOSE:-/dev/null}:${SYNC_SERVER_COMPOSE:-/tmp/no-sync-compose}:ro
-      - ${SYNC_SERVER_ENV:-/dev/null}:${SYNC_SERVER_ENV:-/tmp/no-sync-env}:ro
+      # NOTE: Docker socket mount removed - use run-with-sync-control.sh for sync coordination
+      # If you need container-based cron with sync server control, add these mounts manually:
+      #   - /var/run/docker.sock:/var/run/docker.sock
+      #   - /path/to/sync-server/docker-compose.yml:/path/to/sync-server/docker-compose.yml:ro
+      #   - /path/to/sync-server/.env:/path/to/sync-server/.env:ro
     env_file:
       - .env.local
     extra_hosts:
