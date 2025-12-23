@@ -31,9 +31,14 @@ services:
       - WRITE_TO_NOTE=${WRITE_TO_NOTE:-true}     # Write OCR data back to .note files
       - CREATE_BACKUPS=${CREATE_BACKUPS:-true}   # Create backups before modifying
       - RESET_DATABASE=${RESET_DATABASE:-false}  # Clear history and reprocess all files
-      # Sync server coordination (optional - set in .env.local if using sync server)
+      # Storage mode: personal_cloud (default), mac_app, or none
+      - STORAGE_MODE=${STORAGE_MODE:-}
+      # Personal Cloud sync server coordination (default when configured)
       - SYNC_SERVER_COMPOSE=${SYNC_SERVER_COMPOSE:-}
       - SYNC_SERVER_ENV=${SYNC_SERVER_ENV:-}
+      # Mac app mode (alternative to Personal Cloud)
+      - MACAPP_DATABASE_PATH=${MACAPP_DATABASE_PATH:-}
+      - MACAPP_NOTES_PATH=${MACAPP_NOTES_PATH:-}
     volumes:
       # Supernote data (read-write to inject OCR data)
       # Set SUPERNOTE_DATA_PATH in .env.local
