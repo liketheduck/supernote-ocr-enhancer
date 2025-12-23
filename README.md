@@ -38,14 +38,12 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 
 ## Performance
 
-**Production test results** (111 files, 303 pages):
-- **Processing time**: 4.1 minutes total
-- **Speed**: 0.8 seconds per page average, 2.2 seconds per file
-- **Success rate**: 96.5% (111/115 files completed)
-- **Accuracy**: +41.8% more text captured vs Supernote device OCR
-- **vs Qwen2.5-VL 7B**: 150x faster, 31.5% less text (optimal trade-off for batch processing)
-
-See [FINAL_OCR_COMPARISON_REPORT.md](data/FINAL_OCR_COMPARISON_REPORT.md) for detailed accuracy analysis.
+**Production test results** (100+ files, 300+ pages):
+- **Processing time**: ~4 minutes total
+- **Speed**: ~0.8 seconds per page average
+- **Success rate**: 96%+
+- **Accuracy**: +40% more text captured vs Supernote device OCR
+- **vs Qwen2.5-VL 7B**: 150x faster (optimal trade-off for batch processing)
 
 ## Prerequisites
 
@@ -474,9 +472,7 @@ Files are **skipped** when:
 - **Subsequent pages**: ~20-100 seconds depending on content
 - **GPU**: Metal (Apple Silicon) - CPU will appear idle during processing
 - **Memory**: ~8GB for 7B model
-- **Accuracy**: +107% more text vs Supernote device OCR
-
-See `data/model-comparison-7b-vs-3b.md` for detailed model benchmarks.
+- **Accuracy**: Higher accuracy than Vision Framework, but much slower
 
 ## Troubleshooting
 
@@ -500,7 +496,7 @@ sqlite3 ./data/processing.db "SELECT file_path, file_hash, processing_status FRO
 
 ### Bounding boxes in wrong location
 
-OCR coordinates are scaled from the resized image (800px max) to the original (1920x2560). Verify that `ocr_image_width` and `ocr_image_height` are passed correctly.
+Vision Framework OCR uses full-resolution images (1920x2560) and returns pixel coordinates that are then divided by 11.9 for Supernote's coordinate system. If highlighting is misaligned, verify the coordinate transformation in `note_processor.py`.
 
 ### Sync conflicts
 
@@ -522,13 +518,15 @@ supernote-ocr-enhancer/
 │   ├── ocr_client.py         # OCR API client
 │   ├── note_processor.py     # .note file handling
 │   └── sync_handlers.py      # Sync database handlers (Mac app & Personal Cloud)
+├── config/
+│   └── crontab               # Cron schedule for Docker container (Personal Cloud)
 ├── examples/
 │   └── server.py             # OCR API server (copy to ~/services/ocr-api/)
 ├── scripts/
+│   ├── cron-ocr-job.sh           # Cron job script (runs inside Docker)
+│   ├── cron-macapp-template.sh   # Template for Mac app scheduled OCR (runs on host)
 │   ├── compare_ocr.py            # OCR comparison tool
-│   ├── extract_ocr_text.py       # OCR backup/export
-│   ├── test_macapp_single.py     # Test single file with Mac app mode
-│   └── cron-macapp-template.sh   # Template for Mac app scheduled OCR
+│   └── extract_ocr_text.py       # OCR backup/export
 └── data/
     ├── processing.db         # State database (git-ignored)
     └── backups/              # File backups (git-ignored)

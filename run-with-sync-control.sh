@@ -140,12 +140,12 @@ run_ocr_enhancer() {
     log_info "Running Supernote OCR Enhancer..."
 
     if $DRY_RUN; then
-        log_info "[DRY RUN] Would run: docker compose -f $OCR_COMPOSE run --rm supernote-ocr-enhancer"
+        log_info "[DRY RUN] Would run: docker compose -f $OCR_COMPOSE run --rm ocr-enhancer python /app/main.py"
         return 0
     fi
 
     # Run OCR enhancer (single run mode with PROCESS_INTERVAL=0)
-    docker compose -f "$OCR_COMPOSE" run --rm supernote-ocr-enhancer
+    docker compose -f "$OCR_COMPOSE" run --rm ocr-enhancer python /app/main.py
     local exit_code=$?
 
     if [ $exit_code -eq 0 ]; then

@@ -28,6 +28,8 @@ ENV/
 data/backups/
 data/original-ocr-backup/
 data/*.db
+data/*.md
+data/diagnostics/
 data/*.json
 data/*.log
 data/*.txt
