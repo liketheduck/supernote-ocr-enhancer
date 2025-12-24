@@ -68,19 +68,19 @@ if [ -n "$SYNC_COMPOSE" ] && [ -f "$SYNC_COMPOSE" ] && [ -n "$SYNC_ENV" ] && [ -
     docker -H unix:///var/run/docker.sock compose -f "$SYNC_COMPOSE" start supernote-mariadb supernote-redis >> "$LOG_FILE" 2>&1
     sleep 5
 
-    # Get current timestamp
-    current_ts=$(($(date +%s) * 1000))
+    # 1 minute in milliseconds (to bump edit time slightly, preserving history)
+    one_minute_ms=60000
     local_time=$(date '+%Y-%m-%d %H:%M:%S')
 
     # Update all .note files in database
     SUPERNOTE_DATA="${SUPERNOTE_DATA_PATH:-/supernote/data}"
     updated=0
 
-    # Get file list from database
+    # Get file list from database (including terminal_file_edit_time to preserve history)
     docker -H unix:///var/run/docker.sock exec supernote-mariadb mysql -usupernote -p"${MYSQL_PASSWORD}" supernotedb -N -e \
-        "SELECT id, file_name FROM f_user_file WHERE file_name LIKE '%.note' AND is_active = 'Y';" 2>/dev/null > /tmp/db_files.txt
+        "SELECT id, file_name, terminal_file_edit_time FROM f_user_file WHERE file_name LIKE '%.note' AND is_active = 'Y';" 2>/dev/null > /tmp/db_files.txt
 
-    while IFS=$'\t' read -r id filename; do
+    while IFS=$'\t' read -r id filename db_edit_time; do
         [ -z "$id" ] && continue
 
         # Find file on disk
@@ -90,8 +90,15 @@ if [ -n "$SYNC_COMPOSE" ] && [ -f "$SYNC_COMPOSE" ] && [ -n "$SYNC_ENV" ] && [ -
             disksize=$(stat -c%s "$diskfile" 2>/dev/null || stat -f%z "$diskfile" 2>/dev/null)
             diskmd5=$(md5sum "$diskfile" 2>/dev/null | cut -d' ' -f1 || md5 -q "$diskfile" 2>/dev/null)
 
+            # Preserve file history: bump edit time by 1 minute instead of setting to NOW
+            if [ -n "$db_edit_time" ] && [ "$db_edit_time" != "0" ]; then
+                new_edit_time=$((db_edit_time + one_minute_ms))
+            else
+                new_edit_time=$(($(date +%s) * 1000))
+            fi
+
             docker -H unix:///var/run/docker.sock exec supernote-mariadb mysql -usupernote -p"${MYSQL_PASSWORD}" supernotedb -e \
-                "UPDATE f_user_file SET size = $disksize, md5 = '$diskmd5', terminal_file_edit_time = $current_ts, update_time = '$local_time' WHERE id = $id;" 2>/dev/null
+                "UPDATE f_user_file SET size = $disksize, md5 = '$diskmd5', terminal_file_edit_time = $new_edit_time, update_time = '$local_time' WHERE id = $id;" 2>/dev/null
             updated=$((updated + 1))
         fi
     done < /tmp/db_files.txt

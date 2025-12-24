@@ -34,6 +34,7 @@ from note_processor import (
     inject_ocr_results,
     get_existing_ocr_text
 )
+from sync_handlers import create_sync_handler
 
 # Configuration from environment
 OCR_API_URL = os.getenv("OCR_API_URL", "http://host.docker.internal:8100")
@@ -43,6 +44,12 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 CREATE_BACKUPS = os.getenv("CREATE_BACKUPS", "true").lower() == "true"
 WRITE_TO_NOTE = os.getenv("WRITE_TO_NOTE", "true").lower() == "true"
 RESET_DATABASE = os.getenv("RESET_DATABASE", "false").lower() == "true"
+# Sync database configuration
+STORAGE_MODE = os.getenv("STORAGE_MODE", "")
+MACAPP_DATABASE_PATH = os.getenv("MACAPP_DATABASE_PATH", "")
+MACAPP_NOTES_PATH = os.getenv("MACAPP_NOTES_PATH", "")
+SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
+SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
 DATA_PATH = Path("/app/data")
 BACKUP_PATH = DATA_PATH / "backups"
 DB_PATH = DATA_PATH / "processing.db"
@@ -58,6 +65,7 @@ logger = logging.getLogger("supernote-ocr-enhancer")
 # Initialize components
 db: Optional[Database] = None
 ocr_client: Optional[OCRClient] = None
+sync_handler = None  # Initialized in main()
 
 # FastAPI app for health checks
 app = FastAPI(title="Supernote OCR Enhancer")
@@ -338,6 +346,17 @@ def run_processing():
     processing_state["pages_processed"] = total_pages
 
     logger.info(f"Processing complete: {successful} files, {total_pages} pages, {failed} failed")
+
+    # Update sync database for modified files (Mac App mode)
+    # This ensures the Mac app knows files changed and will UPLOAD (not download)
+    if sync_handler and WRITE_TO_NOTE:
+        modified_files = [r.file_path for r in results if r.success and r.pages_processed > 0]
+        if modified_files:
+            logger.info(f"Updating sync database for {len(modified_files)} modified files...")
+            updated, sync_failed = sync_handler.update_modified_files(modified_files)
+            if sync_failed > 0:
+                logger.warning(f"Sync database update: {updated} succeeded, {sync_failed} failed")
+
     return results
 
 
@@ -348,13 +367,14 @@ def run_health_server():
 
 def main():
     """Main entry point"""
-    global db, ocr_client
+    global db, ocr_client, sync_handler
 
     logger.info("=" * 60)
     logger.info("Supernote OCR Enhancer starting...")
     logger.info("=" * 60)
     logger.info(f"OCR API URL: {OCR_API_URL}")
     logger.info(f"Supernote data path: {SUPERNOTE_DATA_PATH}")
+    logger.info(f"Storage mode: {STORAGE_MODE or 'auto-detect'}")
     logger.info(f"Process interval: {PROCESS_INTERVAL}s (0 = single run)")
     logger.info(f"Write to .note files: {WRITE_TO_NOTE}")
     logger.info(f"Create backups: {CREATE_BACKUPS}")
@@ -385,6 +405,21 @@ def main():
 
     # Initialize OCR client
     ocr_client = OCRClient(OCR_API_URL)
+
+    # Initialize sync handler (for updating Mac app or Personal Cloud database after OCR)
+    try:
+        sync_handler = create_sync_handler(
+            mode=STORAGE_MODE or None,
+            mac_app_database=MACAPP_DATABASE_PATH or None,
+            mac_app_notes_path=MACAPP_NOTES_PATH or None,
+            sync_server_compose=SYNC_SERVER_COMPOSE or None,
+            sync_server_env=SYNC_SERVER_ENV or None
+        )
+        sync_status = sync_handler.get_status()
+        logger.info(f"Sync handler: {sync_status.get('mode', 'unknown')} - {sync_status.get('status', 'unknown')}")
+    except Exception as e:
+        logger.warning(f"Sync handler initialization failed: {e} - continuing without sync")
+        sync_handler = None
 
     # Start health server in background
     health_thread = threading.Thread(target=run_health_server, daemon=True)

@@ -72,12 +72,16 @@ Required settings in `.env.local`:
 ```bash
 # REQUIRED: Path to your Supernote .note files
 SUPERNOTE_DATA_PATH=/path/to/your/supernote/data
-
-# OPTIONAL: Only if using Supernote Cloud sync server
-# (See "Supernote Cloud / Sync Server" section below)
-SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
-SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
 ```
+
+**Optional** - Only if using a self-hosted Supernote Cloud sync server:
+```bash
+# Uncomment and set these ONLY if you use a self-hosted sync server
+# SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
+# SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
+```
+
+> **Note**: If you don't use a sync server (manual file transfer or Mac app), leave the sync server settings commented out.
 
 ### 2. Build the Container
 
@@ -415,6 +419,17 @@ If not using a sync server, leave these blank and run directly:
 ```bash
 docker compose run --rm ocr-enhancer python /app/main.py
 ```
+
+### Scheduling Personal Cloud OCR (Cron)
+
+For automated scheduling with Personal Cloud, use `run-with-sync-control.sh` from your host's crontab:
+
+```bash
+# Add to crontab (crontab -e)
+0 0 * * * /path/to/supernote-ocr-enhancer/run-with-sync-control.sh >> /tmp/ocr-enhancer.log 2>&1
+```
+
+> **Note**: Container-based cron (`config/crontab`) requires additional Docker volume mounts for sync server coordination. See comments in `docker-compose.yml` for manual setup.
 
 ---
 
