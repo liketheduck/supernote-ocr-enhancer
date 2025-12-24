@@ -218,8 +218,9 @@ sync_supernote_database() {
             ((deleted++))
         else
             # File exists - check if size, MD5, or terminal_file_edit_time needs update
-            local disksize=$(stat -f%z "$diskfile" 2>/dev/null)
-            local diskmd5=$(md5 -q "$diskfile" 2>/dev/null)
+            # Support both Linux (stat -c) and macOS (stat -f) syntax
+            local disksize=$(stat -c%s "$diskfile" 2>/dev/null || stat -f%z "$diskfile" 2>/dev/null)
+            local diskmd5=$(md5sum "$diskfile" 2>/dev/null | cut -d' ' -f1 || md5 -q "$diskfile" 2>/dev/null)
 
             # Update if: size changed, MD5 changed, OR terminal_file_edit_time is 0/missing
             if [ "$disksize" != "$dbsize" ] || [ "$diskmd5" != "$dbmd5" ] || [ "$db_edit_time" = "0" ] || [ -z "$db_edit_time" ]; then

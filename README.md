@@ -420,6 +420,17 @@ If not using a sync server, leave these blank and run directly:
 docker compose run --rm ocr-enhancer python /app/main.py
 ```
 
+### Scheduling Personal Cloud OCR (Cron)
+
+For automated scheduling with Personal Cloud, use `run-with-sync-control.sh` from your host's crontab:
+
+```bash
+# Add to crontab (crontab -e)
+0 0 * * * /path/to/supernote-ocr-enhancer/run-with-sync-control.sh >> /tmp/ocr-enhancer.log 2>&1
+```
+
+> **Note**: Container-based cron (`config/crontab`) requires additional Docker volume mounts for sync server coordination. See comments in `docker-compose.yml` for manual setup.
+
 ---
 
 ## Manual File Transfer
