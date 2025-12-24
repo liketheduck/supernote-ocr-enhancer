@@ -109,11 +109,11 @@ auto_detect_paths() {
         return 1
     fi
 
-    # Set paths
+    # Set paths (export so docker compose inherits them)
     MACAPP_USER_DATA_PATH="${user_dir%/}"
-    MACAPP_DATABASE_PATH="$MACAPP_USER_DATA_PATH/supernote.db"
-    MACAPP_NOTES_PATH="$MACAPP_USER_DATA_PATH/Supernote"
-    SUPERNOTE_DATA_PATH="$MACAPP_NOTES_PATH"
+    export MACAPP_DATABASE_PATH="$MACAPP_USER_DATA_PATH/supernote.db"
+    export MACAPP_NOTES_PATH="$MACAPP_USER_DATA_PATH/Supernote"
+    export SUPERNOTE_DATA_PATH="$MACAPP_NOTES_PATH"
 
     if [ ! -f "$MACAPP_DATABASE_PATH" ]; then
         log_error "Mac app database not found: $MACAPP_DATABASE_PATH"
@@ -302,14 +302,15 @@ main() {
                 exit 1
             fi
         else
-            SUPERNOTE_DATA_PATH="${MACAPP_NOTES_PATH:-$SUPERNOTE_DATA_PATH}"
+            # Export so docker compose inherits the value
+            export SUPERNOTE_DATA_PATH="${MACAPP_NOTES_PATH:-$SUPERNOTE_DATA_PATH}"
         fi
 
         if [ -z "$MACAPP_DATABASE_PATH" ]; then
             # Try to find it relative to notes path
             local user_dir=$(dirname "$SUPERNOTE_DATA_PATH")
             if [ -f "$user_dir/supernote.db" ]; then
-                MACAPP_DATABASE_PATH="$user_dir/supernote.db"
+                export MACAPP_DATABASE_PATH="$user_dir/supernote.db"
                 log_info "Found database at: $MACAPP_DATABASE_PATH"
             else
                 log_error "MACAPP_DATABASE_PATH not set and could not be auto-detected"
