@@ -201,8 +201,8 @@ sync_supernote_database() {
     local db_records=$(docker exec supernote-mariadb mysql -usupernote -p"${MYSQL_PASSWORD}" supernotedb -N -e \
         "SELECT id, file_name, size, md5, terminal_file_edit_time FROM f_user_file WHERE file_name LIKE '%.note' AND is_active = 'Y';" 2>/dev/null)
 
-    # Current timestamp in milliseconds for terminal_file_edit_time
-    local current_ts=$(($(date +%s) * 1000))
+    # 1 minute in milliseconds (to bump edit time slightly, preserving history)
+    local one_minute_ms=60000
 
     while IFS=$'\t' read -r id filename dbsize dbmd5 db_edit_time; do
         [ -z "$id" ] && continue
@@ -225,13 +225,22 @@ sync_supernote_database() {
             # Update if: size changed, MD5 changed, OR terminal_file_edit_time is 0/missing
             if [ "$disksize" != "$dbsize" ] || [ "$diskmd5" != "$dbmd5" ] || [ "$db_edit_time" = "0" ] || [ -z "$db_edit_time" ]; then
                 log_info "  Updating: $filename"
-                # Use local time (not UTC) to match how Supernote device stores timestamps
+                # Preserve file history: bump edit time by 1 minute instead of setting to NOW
+                # This triggers sync while keeping the file's original "last edited" context
+                local new_edit_time
+                if [ -n "$db_edit_time" ] && [ "$db_edit_time" != "0" ]; then
+                    # Add 1 minute to existing edit time
+                    new_edit_time=$((db_edit_time + one_minute_ms))
+                else
+                    # No existing time, use current time
+                    new_edit_time=$(($(date +%s) * 1000))
+                fi
                 local local_time=$(date '+%Y-%m-%d %H:%M:%S')
                 docker exec supernote-mariadb mysql -usupernote -p"${MYSQL_PASSWORD}" supernotedb -e \
                     "UPDATE f_user_file
                      SET size = $disksize,
                          md5 = '$diskmd5',
-                         terminal_file_edit_time = $current_ts,
+                         terminal_file_edit_time = $new_edit_time,
                          update_time = '$local_time'
                      WHERE id = $id;" 2>/dev/null
                 ((updated++))
