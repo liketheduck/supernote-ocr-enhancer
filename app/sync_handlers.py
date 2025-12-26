@@ -359,8 +359,6 @@ class PersonalCloudSyncHandler(SyncHandler):
 
         updated = 0
         failed = 0
-        import time
-        one_second_ms = 1000  # Preserve file history by bumping time +1 sec (sufficient to win sync)
 
         for file_path in modified_files:
             try:
@@ -374,33 +372,14 @@ class PersonalCloudSyncHandler(SyncHandler):
                 new_size = file_path.stat().st_size
                 file_name = file_path.name
 
-                # Get existing terminal_file_edit_time to preserve history
-                query_sql = f"SELECT terminal_file_edit_time FROM f_user_file WHERE file_name = '{file_name}' AND is_active = 'Y' LIMIT 1;"
-                result = subprocess.run(
-                    ["docker", "exec", self.container_name, "mysql",
-                     f"-u{self.username}", f"-p{self.password}", self.database_name,
-                     "-N", "-e", query_sql],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-
-                # Calculate new edit time: existing + 1 second, or NOW if no existing
-                existing_time = result.stdout.strip() if result.returncode == 0 else ""
-                if existing_time and existing_time != "0" and existing_time != "NULL":
-                    try:
-                        new_edit_time = int(existing_time) + one_second_ms
-                    except ValueError:
-                        new_edit_time = int(time.time() * 1000)
-                else:
-                    new_edit_time = int(time.time() * 1000)
-
-                # Update the database record
+                # Update size/md5 to reflect new file content, and update_time to trigger sync
+                # IMPORTANT: Do NOT modify terminal_file_edit_time - that represents the device's
+                # edit time. Changing it causes conflicts when device syncs with its original time.
+                # The sync protocol detects changes via md5 mismatch, not edit time mismatch.
                 update_sql = f"""
                     UPDATE f_user_file
                     SET size = {new_size},
                         md5 = '{new_md5}',
-                        terminal_file_edit_time = {new_edit_time},
                         update_time = NOW()
                     WHERE file_name = '{file_name}' AND is_active = 'Y';
                 """
