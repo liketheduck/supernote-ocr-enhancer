@@ -34,7 +34,7 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 - **Backup protection**: Creates timestamped backups before modifying any file
 - **Live sync server support**: Updates sync database while server runs (no restart needed)
 - **Proper coordinate system**: Uses device's native coordinate system (PNG pixels ÷ 11.9) for perfect highlighting
-- **Battery-friendly**: TYPE='0' configuration prevents device from re-OCRing after pen strokes
+- **Search-enabled**: TYPE='1' configuration allows device to search injected OCR text
 
 ## Performance
 
@@ -203,27 +203,32 @@ uv remove ocrmac && uv add ocrmac
 4. **OCR**: Sends full-resolution images to Apple Vision Framework via OCR API for word-level text recognition with pixel-accurate bounding boxes
 5. **Transform**: Converts Vision Framework coordinates (PNG pixels) to Supernote's coordinate system (PNG pixels ÷ 11.9)
 6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block with proper coordinate format
-7. **Enable highlighting**: Sets `FILE_RECOGN_TYPE=0` and `FILE_RECOGN_LANGUAGE=en_US` so device uses OCR for search highlighting while preserving our enhanced OCR
+7. **Enable search**: Sets `FILE_RECOGN_TYPE=1` and `FILE_RECOGN_LANGUAGE=en_US` so device uses OCR for search and highlighting
 
-### Critical: FILE_RECOGN_TYPE='0' vs '1'
+### Critical: FILE_RECOGN_TYPE Setting (Tested 2025-12-26)
 
-**The Discovery**: Through comprehensive testing, we discovered that `FILE_RECOGN_TYPE='0'` is the optimal setting:
+**The Discovery**: Through controlled A/B testing, we determined that `FILE_RECOGN_TYPE='1'` is **required** for search:
 
-| Setting | Highlighting Works? | Device Re-OCRs? | Battery Impact | Our Choice |
-|---------|---------------------|-----------------|----------------|------------|
-| TYPE='0' | ✅ Yes | ❌ No | Low (no re-OCR) | **✅ Default** |
-| TYPE='1' | ✅ Yes | ✅ Yes | High (re-OCRs after pen strokes) | ❌ Not used |
+| Setting | Search Works? | Device Re-OCRs? | Our Choice |
+|---------|---------------|-----------------|------------|
+| TYPE='1' | ✅ Yes | ⚠️ Only edited pages | **✅ Required** |
+| TYPE='0' | ❌ No | ❌ Never | ❌ Breaks search |
 
-**Why TYPE='0'?**
-1. **Preserves our OCR**: Device doesn't overwrite Vision Framework OCR with its lower-quality OCR (~27% WER)
-2. **Saves battery**: Device doesn't re-run OCR after every pen stroke
-3. **Highlighting still works**: Search highlighting is fully functional
-4. **Trade-off**: Device must sync to computer before search highlighting updates (acceptable for our use case)
+**Why TYPE='1' is required:**
+- `FILE_RECOGN_TYPE` is the **master switch** for the device's recognition subsystem
+- TYPE='0' completely disables ALL recognition features, including search of existing OCR data
+- There is no way to separate "enable search" from "enable realtime OCR" - it's a single toggle
 
-**Testing revealed**:
+**The workflow with TYPE='1':**
+1. You write on device → device does basic OCR
+2. File syncs to server → our enhancer applies better Vision OCR
+3. File syncs back to device → device uses our better OCR for search
+4. If you edit that page later → device re-OCRs just that page → next sync → we fix it again
+
+**Testing notes**:
 - `LANG='none'` causes "redownload language" prompt (never use)
-- `LANG=''` (empty) works but provides no benefit over `LANG='en_US'`
-- `RECOGNSTATUS` value doesn't affect device behavior (new pen strokes always trigger OCR with TYPE='1')
+- `RECOGNSTATUS=1` (done) doesn't prevent device re-OCR on edits - TYPE controls this
+- Page-level `RECOGNTYPE` is separate from file-level `FILE_RECOGN_TYPE` but doesn't help
 
 ### Architecture: Why No Server Restart?
 
@@ -239,10 +244,11 @@ Previous versions stopped the sync server during OCR processing. This is no long
 - No long-running transactions span multiple requests
 - Updated database values are seen immediately on next sync
 
-**3. File-level conflicts are handled by timestamps**
-- We bump `terminal_file_edit_time` by 1 second after OCR injection
-- Combined with the new MD5 hash, this signals "local file is newer"
-- The sync server tells devices to download our OCR'd version
+**3. File-level conflicts are handled by MD5 hash**
+- We update `size`, `md5`, and `update_time` in the sync database
+- We do NOT modify `terminal_file_edit_time` (device's edit timestamp)
+- This prevents sync conflicts: device keeps its timestamp, server has new content
+- On next sync, changed MD5 triggers download of our OCR'd version
 
 **4. Graceful no-op for unchanged files**
 - SQLite tracks file hashes locally
@@ -422,9 +428,10 @@ If you use a **self-hosted Supernote Cloud sync server** (like [Supernote-Privat
 
 When OCR modifies a .note file, the enhancer updates the sync server's MariaDB database:
 - Sets new `size` and `md5` hash
-- Bumps `terminal_file_edit_time` by 1 second (so your OCR'd version wins the next sync)
+- Updates `update_time` to current time
+- Does NOT modify `terminal_file_edit_time` (prevents sync conflicts)
 
-This happens atomically via Docker socket access to the MariaDB container.
+This happens atomically via Docker socket access to the MariaDB container. The changed MD5 hash triggers the device to download the OCR-enhanced version on next sync.
 
 ### Configuration
 
@@ -505,13 +512,21 @@ Files are **skipped** when:
 - Already successfully processed with same content hash
 - This prevents wasting time re-OCRing unchanged files
 
-### Preventing Device Re-OCR
+### Device Re-OCR Behavior
 
-**Problem**: By default, Supernote devices have "Real-time Recognition" enabled (`FILE_RECOGN_TYPE=1` in the .note file header). This causes the device to continuously re-run its own OCR, overwriting any enhanced OCR you inject.
+**Background**: Supernote devices have "Real-time Recognition" controlled by `FILE_RECOGN_TYPE` in the .note file header. This setting is a single toggle that controls BOTH search functionality AND real-time OCR.
 
-**Solution**: When this tool processes a file, it sets `FILE_RECOGN_TYPE=0` in the notebook header. This disables on-device OCR for that specific file, preserving your enhanced Vision Framework OCR results.
+**Our approach**: We set `FILE_RECOGN_TYPE=1` to enable search. This means:
+- ✅ Search and highlighting work for injected OCR text
+- ⚠️ Device may re-OCR pages when you add new strokes
 
-**Important**: This is a per-file setting. New notebooks created on your device will still have real-time recognition enabled until processed by this tool.
+**Why this is acceptable**:
+1. Device only re-OCRs pages you actively edit (not all pages)
+2. Pages with `RECOGNSTATUS=1` and no new content keep our better OCR
+3. Even if device re-OCRs after edits, our enhancer will reprocess on next sync
+4. The alternative (TYPE='0') completely breaks search - not viable
+
+**Important**: There is no way to have both "search works" and "device never re-OCRs". The Supernote firmware uses a single toggle for the entire recognition subsystem.
 
 ## Performance
 
@@ -558,7 +573,8 @@ The OCR enhancer updates the sync database atomically while the server runs. If 
 1. Verify `STORAGE_MODE=personal_cloud` is set in `.env.local`
 2. Verify `MYSQL_PASSWORD` matches your MariaDB container's password
 3. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
-4. The `terminal_file_edit_time` bump (+1 second) ensures your OCR'd files win the sync
+4. The sync handler updates `size`, `md5`, and `update_time` - but NOT `terminal_file_edit_time`
+5. If you see CONFLICT files, check that the enhancer isn't modifying `terminal_file_edit_time`
 
 ## Project Structure
 

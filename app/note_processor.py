@@ -269,15 +269,17 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
     This is a modified version of sn.reconstruct() that properly
     includes recognition text blocks and enables search highlighting.
 
-    IMPORTANT: Uses FILE_RECOGN_TYPE='0' to preserve OCR data!
-    - TYPE='0' enables highlighting while preventing device from re-OCRing
-    - TYPE='1' would cause device to overwrite our OCR after pen strokes
-    - This saves battery life and preserves our high-quality Vision OCR
+    FILE_RECOGN_TYPE controls device behavior:
+    - TYPE='1' = realtime recognition ON = device uses OCR for search/highlighting
+    - TYPE='0' = realtime recognition OFF = device ignores OCR data for search
+
+    We use TYPE='1' to enable search. The device may re-OCR after new pen strokes,
+    but our injected OCR for existing content remains searchable.
 
     Args:
         notebook: The notebook to reconstruct
-        enable_highlighting: If True, set FILE_RECOGN_TYPE to '0' to enable
-            search highlighting while preventing device re-OCR (default: True)
+        enable_highlighting: If True, set FILE_RECOGN_TYPE to '1' to enable
+            search highlighting on device (default: True)
     """
     expected_signature = parser.SupernoteXParser.SN_SIGNATURES[-1]
     metadata = notebook.get_metadata()
@@ -296,11 +298,11 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
             metadata.header['FILE_RECOGN_LANGUAGE'] = 'en_US'
 
         # Enable recognition for search highlighting
-        # TYPE='0' enables highlighting while preventing device from re-OCRing
-        # This preserves our Vision OCR and saves battery life
+        # TYPE='1' enables device to use OCR data for search and highlighting
+        # TYPE='0' disables search entirely (tested 2025-12-26)
         if enable_highlighting:
-            logger.info("Enabling search highlighting (FILE_RECOGN_TYPE -> 0)")
-            metadata.header['FILE_RECOGN_TYPE'] = '0'
+            logger.info("Enabling search highlighting (FILE_RECOGN_TYPE -> 1)")
+            metadata.header['FILE_RECOGN_TYPE'] = '1'
 
     builder = manip.NotebookBuilder()
     manip._pack_type(builder, notebook)
