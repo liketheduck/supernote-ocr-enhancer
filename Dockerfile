@@ -10,11 +10,15 @@ LABEL description="Supernote OCR Enhancer - processes .note files with MLX-VLM O
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Set timezone for cron (must be set at build time)
+ENV TZ=America/New_York
+
 # Set working directory
 WORKDIR /app
 
 # Install system dependencies (including build tools for pycairo, cron, and docker CLI)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     curl \
     gcc \
     pkg-config \
@@ -30,7 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update \
     && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && apt-get clean \
+    # Configure timezone for cron to use EST/EDT
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
 
 # Copy requirements first for better caching
 COPY app/requirements.txt /app/requirements.txt
@@ -56,9 +63,7 @@ RUN useradd --create-home --shell /bin/bash appuser \
     && chown -R appuser:appuser /app \
     && mkdir -p /app/data && chown -R appuser:appuser /app/data
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# No healthcheck - this is a cron-based service, not a web server
 
 # Default command - run entrypoint script
 CMD ["/docker-entrypoint.sh"]
