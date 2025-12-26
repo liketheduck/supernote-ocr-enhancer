@@ -247,9 +247,14 @@ Previous versions stopped the sync server during OCR processing. This is no long
 **4. Graceful no-op for unchanged files**
 - SQLite tracks file hashes locally
 - Files that haven't changed are skipped in milliseconds
-- Running every 10 minutes adds negligible overhead
+- Running every minute adds negligible overhead (~2-3 second no-op runs)
 
-This architecture allows frequent OCR runs (every 10 minutes) without service interruption or database corruption risk.
+**5. Age threshold prevents mid-sync processing**
+- Files modified less than 10 seconds ago are skipped
+- Ensures sync completes before OCR runs
+- Next cron run picks up the stable file
+
+This architecture allows frequent OCR runs (every minute) without service interruption or database corruption risk.
 
 ### Critical: Supernote Coordinate System Discovery
 
@@ -434,10 +439,12 @@ SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
 
 ### Scheduling Personal Cloud OCR (Container Cron)
 
-The container runs a cron job every 10 minutes by default. This is safe because:
-- Files that haven't changed are skipped (fast hash comparison)
-- Database updates are atomic (no corruption risk)
-- The sync server keeps running (no service interruption)
+The container runs a cron job **every minute** by default for near-realtime OCR processing. This is safe because:
+
+- **Age threshold**: Files modified <10 seconds ago are skipped (prevents processing mid-sync)
+- **Hash comparison**: Already-processed files are skipped in milliseconds
+- **Minimal overhead**: Idle runs use ~1 MiB RAM, 0% CPU, complete in ~2-3 seconds
+- **Atomic updates**: Database updates are safe while sync server runs
 
 To use container-based cron:
 ```bash
@@ -448,7 +455,7 @@ docker compose up -d
 docker compose logs -f ocr-enhancer
 ```
 
-The cron schedule is in `config/crontab` (default: every 10 minutes).
+The cron schedule is in `config/crontab` (default: every minute).
 
 ### Legacy: Manual Sync Control
 
@@ -568,7 +575,7 @@ supernote-ocr-enhancer/
 │   ├── note_processor.py     # .note file handling
 │   └── sync_handlers.py      # Sync database handlers (Mac app & Personal Cloud)
 ├── config/
-│   └── crontab               # Cron schedule (every 10 min) for Docker container
+│   └── crontab               # Cron schedule (every 1 min) for Docker container
 ├── examples/
 │   └── server.py             # OCR API server (copy to ~/services/ocr-api/)
 ├── scripts/

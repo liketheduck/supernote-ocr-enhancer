@@ -2,9 +2,11 @@
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SHELL=/bin/bash
 
-# OCR processing - runs every 10 minutes
-# Safe to run frequently: gracefully skips files that don't need processing
-# Database updates happen while sync server runs (no restart needed)
-*/10 * * * * /app/scripts/cron-ocr-job.sh
+# OCR processing - runs every minute
+# Safe to run frequently:
+# - Skips files modified <10s ago (prevents processing mid-sync)
+# - Skips already-processed files (fast hash comparison)
+# - Idle overhead: ~1MiB RAM, 0% CPU
+* * * * * /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end

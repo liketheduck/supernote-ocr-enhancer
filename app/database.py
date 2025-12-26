@@ -5,6 +5,7 @@ Uses SQLite for persistent state management.
 
 import sqlite3
 import hashlib
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Tuple
@@ -13,6 +14,9 @@ import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Minimum file age (seconds) before processing - prevents processing mid-sync files
+MIN_FILE_AGE_SECONDS = 10
 
 
 @dataclass
@@ -200,6 +204,14 @@ class Database:
 
         Returns: (should_process, reason)
         """
+        # Check file age first - skip files that are too recent (likely mid-sync)
+        try:
+            file_age = time.time() - file_path.stat().st_mtime
+            if file_age < MIN_FILE_AGE_SECONDS:
+                return False, f"too_recent ({file_age:.0f}s < {MIN_FILE_AGE_SECONDS}s)"
+        except OSError:
+            pass  # File may have been deleted, let later code handle it
+
         record = self.get_note_file(file_path)
 
         if record is None:
