@@ -569,13 +569,19 @@ Vision Framework OCR uses full-resolution images (1920x2560) and returns pixel c
 
 ### Sync conflicts
 
-The OCR enhancer prevents conflicts by properly updating `terminal_file_edit_time`. If you see sync issues:
+The OCR enhancer prevents conflicts by:
+1. **Skipping recently uploaded files**: Files uploaded by your device in the last 60 minutes are considered "actively edited" and are skipped. This prevents conflicts when you're actively working on a file.
+2. **Bumping terminal_file_edit_time**: After OCR, we bump the server's timestamp by +1 second so the server version wins the sync (device downloads).
 
+**If you see conflicts:**
+- The file was likely edited on your device between syncs
+- Wait 60 minutes after your last edit, then re-run OCR
+- Or accept that actively-edited files will conflict until they stabilize
+
+**Configuration checks:**
 1. Verify `STORAGE_MODE=personal_cloud` is set in `.env.local`
 2. Verify `MYSQL_PASSWORD` matches your MariaDB container's password
 3. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
-4. The sync handler bumps `terminal_file_edit_time` by +1 second so server version wins
-5. Conflicts occur when `terminal_file_edit_time` is the same but `md5` differs - the +1s bump prevents this
 
 ## Project Structure
 

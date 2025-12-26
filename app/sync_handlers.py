@@ -69,6 +69,13 @@ class SyncHandler(ABC):
         """Get status information about the sync system."""
         pass
 
+    def get_recently_uploaded_files(self, minutes: int = 60) -> set:
+        """
+        Get set of filenames that were recently uploaded by the device.
+        Default implementation returns empty set (no filtering).
+        """
+        return set()
+
 
 class NoOpSyncHandler(SyncHandler):
     """
@@ -267,6 +274,11 @@ class PersonalCloudSyncHandler(SyncHandler):
 
     This handler does NOT manage Docker start/stop - that's handled by
     run-with-sync-control.sh. This handler only updates the database.
+
+    CONFLICT PREVENTION:
+    Files that were recently uploaded by the device are "actively edited" and
+    should not be OCR'd, as this would create a conflict on next sync.
+    Use get_recently_uploaded_files() to check before processing.
     """
 
     def __init__(
@@ -424,6 +436,56 @@ class PersonalCloudSyncHandler(SyncHandler):
 
         logger.info(f"Personal Cloud sync updated: {updated} files, {failed} failed")
         return updated, failed
+
+    def get_recently_uploaded_files(self, minutes: int = 60) -> set:
+        """
+        Get set of filenames that were recently uploaded by the device.
+
+        These files are "actively edited" and should be skipped for OCR processing
+        to avoid sync conflicts. The device uploaded them recently, so any server-side
+        modification would conflict with pending device changes.
+
+        Args:
+            minutes: How far back to look for uploads (default: 60 minutes)
+
+        Returns:
+            Set of filenames (basenames) that were recently uploaded
+        """
+        if not self.is_available():
+            logger.warning("Personal Cloud database not available for upload check")
+            return set()
+
+        try:
+            # Query f_file_action for recent uploads (action='A')
+            query = f"""
+                SELECT DISTINCT file_name
+                FROM f_file_action
+                WHERE action = 'A'
+                  AND file_name LIKE '%.note'
+                  AND update_time > DATE_SUB(NOW(), INTERVAL {minutes} MINUTE);
+            """
+
+            result = subprocess.run(
+                ["docker", "exec", self.container_name, "mysql",
+                 f"-u{self.username}", f"-p{self.password}", self.database_name,
+                 "-N", "-e", query],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                files = set(line.strip() for line in result.stdout.strip().split('\n') if line.strip())
+                if files:
+                    logger.info(f"Found {len(files)} recently uploaded files (last {minutes} min)")
+                return files
+            else:
+                logger.error(f"Failed to query recent uploads: {result.stderr}")
+                return set()
+
+        except Exception as e:
+            logger.error(f"Error checking recent uploads: {e}")
+            return set()
 
 
 def create_sync_handler(

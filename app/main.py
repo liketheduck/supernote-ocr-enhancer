@@ -314,6 +314,17 @@ def run_processing():
         processing_state["last_run"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return []
 
+    # Filter out recently uploaded files to prevent sync conflicts
+    # Files uploaded by the device in the last 60 minutes are "actively edited"
+    # and should not be OCR'd until the user is done editing
+    recently_uploaded = sync_handler.get_recently_uploaded_files(minutes=60)
+    if recently_uploaded:
+        original_count = len(note_files)
+        note_files = [f for f in note_files if f.name not in recently_uploaded]
+        skipped = original_count - len(note_files)
+        if skipped > 0:
+            logger.info(f"Skipping {skipped} recently uploaded files to prevent sync conflicts")
+
     # Start processing run
     run_id = db.start_processing_run()
 
