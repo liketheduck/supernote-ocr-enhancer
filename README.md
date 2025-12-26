@@ -254,14 +254,13 @@ Previous versions stopped the sync server during OCR processing. This is no long
 **4. Graceful no-op for unchanged files**
 - SQLite tracks file hashes locally
 - Files that haven't changed are skipped in milliseconds
-- Running every minute adds negligible overhead (~2-3 second no-op runs)
+- Running hourly adds negligible overhead
 
 **5. Age threshold prevents mid-sync processing**
-- Files modified less than 10 seconds ago are skipped
+- Files modified less than 60 seconds ago are skipped
 - Ensures sync completes before OCR runs
-- Next cron run picks up the stable file
 
-This architecture allows frequent OCR runs (every minute) without service interruption or database corruption risk.
+This architecture allows hourly OCR runs without service interruption or database corruption risk.
 
 ### Critical: Supernote Coordinate System Discovery
 
@@ -448,11 +447,11 @@ MYSQL_PASSWORD=your_mysql_password_here
 
 ### Scheduling Personal Cloud OCR (Container Cron)
 
-The container runs a cron job **every minute** by default for near-realtime OCR processing. This is safe because:
+The container runs a cron job **every hour** by default. This is safe because:
 
-- **Age threshold**: Files modified <10 seconds ago are skipped (prevents processing mid-sync)
+- **Age threshold**: Files modified <60 seconds ago are skipped (prevents processing mid-sync)
+- **Conflict prevention**: Files uploaded in last 60 minutes are skipped (prevents sync conflicts)
 - **Hash comparison**: Already-processed files are skipped in milliseconds
-- **Minimal overhead**: Idle runs use ~1 MiB RAM, 0% CPU, complete in ~2-3 seconds
 - **Atomic updates**: Database updates are safe while sync server runs
 
 To use container-based cron:
@@ -464,7 +463,7 @@ docker compose up -d
 docker compose logs -f ocr-enhancer
 ```
 
-The cron schedule is in `config/crontab` (default: every minute).
+The cron schedule is in `config/crontab` (default: every hour at :00).
 
 ### Legacy: Manual Sync Control
 

@@ -2,11 +2,10 @@
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SHELL=/bin/bash
 
-# OCR processing - runs every minute
-# Safe to run frequently:
-# - Skips files modified <10s ago (prevents processing mid-sync)
+# OCR processing - runs every hour
+# - Skips files modified <60s ago (prevents processing mid-sync)
+# - Skips files uploaded in last 60 min (prevents sync conflicts)
 # - Skips already-processed files (fast hash comparison)
-# - Idle overhead: ~1MiB RAM, 0% CPU
-* * * * * /app/scripts/cron-ocr-job.sh
+0 * * * * /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end

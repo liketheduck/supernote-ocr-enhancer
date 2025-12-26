@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Minimum file age (seconds) before processing - prevents processing mid-sync files
-MIN_FILE_AGE_SECONDS = 10
+MIN_FILE_AGE_SECONDS = 60  # 1 minute
 
 
 @dataclass
