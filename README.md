@@ -244,11 +244,12 @@ Previous versions stopped the sync server during OCR processing. This is no long
 - No long-running transactions span multiple requests
 - Updated database values are seen immediately on next sync
 
-**3. File-level conflicts are handled by MD5 hash**
-- We update `size`, `md5`, and `update_time` in the sync database
-- We do NOT modify `terminal_file_edit_time` (device's edit timestamp)
-- This prevents sync conflicts: device keeps its timestamp, server has new content
-- On next sync, changed MD5 triggers download of our OCR'd version
+**3. File-level sync uses terminal_file_edit_time**
+- We update `size`, `md5`, and bump `terminal_file_edit_time` by +1 second
+- Sync protocol: higher `terminal_file_edit_time` wins (determines upload vs download)
+- If user hasn't edited: our +1s bump > device's timestamp → device downloads our OCR
+- If user HAS edited: their new timestamp >> our +1s bump → device uploads (user wins)
+- This prevents conflicts: there's always a clear winner based on timestamp comparison
 
 **4. Graceful no-op for unchanged files**
 - SQLite tracks file hashes locally
@@ -428,10 +429,10 @@ If you use a **self-hosted Supernote Cloud sync server** (like [Supernote-Privat
 
 When OCR modifies a .note file, the enhancer updates the sync server's MariaDB database:
 - Sets new `size` and `md5` hash
+- Bumps `terminal_file_edit_time` by +1 second (so server version is "newer")
 - Updates `update_time` to current time
-- Does NOT modify `terminal_file_edit_time` (prevents sync conflicts)
 
-This happens atomically via Docker socket access to the MariaDB container. The changed MD5 hash triggers the device to download the OCR-enhanced version on next sync.
+This happens atomically via Docker socket access to the MariaDB container. The bumped timestamp makes the server's version win the sync (device downloads), unless the user has edited on the device (their timestamp would be much later, so device uploads).
 
 ### Configuration
 
@@ -568,13 +569,13 @@ Vision Framework OCR uses full-resolution images (1920x2560) and returns pixel c
 
 ### Sync conflicts
 
-The OCR enhancer updates the sync database atomically while the server runs. If you see sync issues:
+The OCR enhancer prevents conflicts by properly updating `terminal_file_edit_time`. If you see sync issues:
 
 1. Verify `STORAGE_MODE=personal_cloud` is set in `.env.local`
 2. Verify `MYSQL_PASSWORD` matches your MariaDB container's password
 3. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
-4. The sync handler updates `size`, `md5`, and `update_time` - but NOT `terminal_file_edit_time`
-5. If you see CONFLICT files, check that the enhancer isn't modifying `terminal_file_edit_time`
+4. The sync handler bumps `terminal_file_edit_time` by +1 second so server version wins
+5. Conflicts occur when `terminal_file_edit_time` is the same but `md5` differs - the +1s bump prevents this
 
 ## Project Structure
 

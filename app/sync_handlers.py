@@ -372,14 +372,32 @@ class PersonalCloudSyncHandler(SyncHandler):
                 new_size = file_path.stat().st_size
                 file_name = file_path.name
 
-                # Update size/md5 to reflect new file content, and update_time to trigger sync
-                # IMPORTANT: Do NOT modify terminal_file_edit_time - that represents the device's
-                # edit time. Changing it causes conflicts when device syncs with its original time.
-                # The sync protocol detects changes via md5 mismatch, not edit time mismatch.
+                # Update size/md5/terminal_file_edit_time to reflect modified file
+                #
+                # CRITICAL: We MUST bump terminal_file_edit_time to avoid conflicts!
+                #
+                # Sync logic:
+                #   - Same terminal_file_edit_time + different md5 = CONFLICT (bad!)
+                #   - Server terminal_file_edit_time > Device = Device downloads (what we want)
+                #   - Device terminal_file_edit_time > Server = Device uploads (user edited)
+                #
+                # By bumping terminal_file_edit_time by 1 second (1000ms), we ensure:
+                #   - If user HASN'T edited: server is "newer", device downloads our OCR ✓
+                #   - If user HAS edited: their new timestamp >> our +1s bump, device uploads ✓
+                #
+                # User edits create timestamps hours/days later, so they always win.
+                # Our +1s bump only wins when user hasn't touched the file.
+                #
+                # Edge case: If terminal_file_edit_time is 0, set to current time in ms.
+                # UNIX_TIMESTAMP() * 1000 gives milliseconds since epoch.
                 update_sql = f"""
                     UPDATE f_user_file
                     SET size = {new_size},
                         md5 = '{new_md5}',
+                        terminal_file_edit_time = CASE
+                            WHEN terminal_file_edit_time = 0 THEN UNIX_TIMESTAMP() * 1000
+                            ELSE terminal_file_edit_time + 1000
+                        END,
                         update_time = NOW()
                     WHERE file_name = '{file_name}' AND is_active = 'Y';
                 """
