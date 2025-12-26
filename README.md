@@ -569,19 +569,39 @@ Vision Framework OCR uses full-resolution images (1920x2560) and returns pixel c
 
 ### Sync conflicts
 
-The OCR enhancer prevents conflicts by:
-1. **Skipping recently uploaded files**: Files uploaded by your device in the last 60 minutes are considered "actively edited" and are skipped. This prevents conflicts when you're actively working on a file.
-2. **Bumping terminal_file_edit_time**: After OCR, we bump the server's timestamp by +1 second so the server version wins the sync (device downloads).
+**Why conflicts occur:**
 
-**If you see conflicts:**
-- The file was likely edited on your device between syncs
-- Wait 60 minutes after your last edit, then re-run OCR
-- Or accept that actively-edited files will conflict until they stabilize
+The Supernote sync protocol creates a CONFLICT when both sides have changes:
+```
+1. Device uploads file (md5=A)
+2. We run OCR → server now has md5=B
+3. User edits on device → device now has md5=C
+4. Device syncs → Server sees: device changed (A→C) AND server changed (A→B)
+5. Both sides changed → CONFLICT (to protect user's work)
+```
+
+**Why timestamps alone can't fix this:**
+
+We bump `terminal_file_edit_time` by +1 second so server wins when only server changed. But if the user edited on device, their timestamp is hours/days later than our +1 second bump. The sync protocol sees both sides have changes and creates a conflict to prevent data loss.
+
+We could force server to always win (set timestamp to year 2099), but that would **overwrite user's handwriting** - unacceptable.
+
+**Our solution - skip actively-edited files:**
+
+1. **Skip recently uploaded files**: Files uploaded in the last 60 minutes are "actively edited" and skipped
+2. **Wait for user to finish**: Once 60 minutes pass with no uploads, user is done editing
+3. **Then OCR**: Device's local file is "clean" (no pending edits), only server changed
+4. **Device downloads**: No conflict because only one side changed
+
+**If you still see conflicts:**
+- You edited the file on device after OCR ran but before syncing
+- Wait 60+ minutes after your last device edit, then sync
+- The conflict file contains our OCR version - you can delete it or keep for reference
 
 **Configuration checks:**
 1. Verify `STORAGE_MODE=personal_cloud` is set in `.env.local`
 2. Verify `MYSQL_PASSWORD` matches your MariaDB container's password
-3. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
+3. Check MariaDB is accessible: `docker exec supernote-mariadb mysqladmin ping`
 
 ## Project Structure
 
