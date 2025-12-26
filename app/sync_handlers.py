@@ -360,7 +360,7 @@ class PersonalCloudSyncHandler(SyncHandler):
         updated = 0
         failed = 0
         import time
-        one_minute_ms = 60000  # Preserve file history by bumping time +1 min
+        one_second_ms = 1000  # Preserve file history by bumping time +1 sec (sufficient to win sync)
 
         for file_path in modified_files:
             try:
@@ -385,11 +385,11 @@ class PersonalCloudSyncHandler(SyncHandler):
                     timeout=10
                 )
 
-                # Calculate new edit time: existing + 1 minute, or NOW if no existing
+                # Calculate new edit time: existing + 1 second, or NOW if no existing
                 existing_time = result.stdout.strip() if result.returncode == 0 else ""
                 if existing_time and existing_time != "0" and existing_time != "NULL":
                     try:
-                        new_edit_time = int(existing_time) + one_minute_ms
+                        new_edit_time = int(existing_time) + one_second_ms
                     except ValueError:
                         new_edit_time = int(time.time() * 1000)
                 else:

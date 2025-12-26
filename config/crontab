@@ -2,7 +2,9 @@
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SHELL=/bin/bash
 
-# Daily OCR processing - runs at midnight
-0 0 * * * /app/scripts/cron-ocr-job.sh
+# OCR processing - runs every 10 minutes
+# Safe to run frequently: gracefully skips files that don't need processing
+# Database updates happen while sync server runs (no restart needed)
+*/10 * * * * /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end

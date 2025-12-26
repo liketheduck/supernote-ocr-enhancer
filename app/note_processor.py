@@ -386,11 +386,12 @@ def inject_ocr_results(
         with open(note_path, 'wb') as f:
             f.write(reconstructed)
 
-        # Preserve timestamp: set mtime to original + 60 seconds
+        # Preserve timestamp: set mtime to original + 1 second
         # This keeps the file's timeline intact while indicating it was processed
-        new_mtime = original_mtime + 60  # Add 1 minute
+        # 1 second is sufficient to win sync (MD5 also changes, so timestamp just needs to be newer)
+        new_mtime = original_mtime + 1  # Add 1 second
         os.utime(note_path, (original_atime, new_mtime))
-        logger.debug(f"Preserved timestamp: original + 60s")
+        logger.debug(f"Preserved timestamp: original + 1s")
 
         logger.info(f"Successfully wrote OCR data to {note_path}")
         return True

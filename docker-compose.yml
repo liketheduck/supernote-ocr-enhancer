@@ -45,11 +45,9 @@ services:
       - ${SUPERNOTE_DATA_PATH:?Set SUPERNOTE_DATA_PATH in .env.local}:/supernote/data
       # Local persistent storage for tracking state and backups
       - ./data:/app/data
-      # NOTE: Docker socket mount removed - use run-with-sync-control.sh for sync coordination
-      # If you need container-based cron with sync server control, add these mounts manually:
-      #   - /var/run/docker.sock:/var/run/docker.sock
-      #   - /path/to/sync-server/docker-compose.yml:/path/to/sync-server/docker-compose.yml:ro
-      #   - /path/to/sync-server/.env:/path/to/sync-server/.env:ro
+      # Docker socket for accessing MariaDB container (Personal Cloud sync database updates)
+      # This allows the container to update the sync database while the sync server runs
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env.local
     extra_hosts:

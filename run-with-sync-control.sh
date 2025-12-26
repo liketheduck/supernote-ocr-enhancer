@@ -201,8 +201,8 @@ sync_supernote_database() {
     local db_records=$(docker exec supernote-mariadb mysql -usupernote -p"${MYSQL_PASSWORD}" supernotedb -N -e \
         "SELECT id, file_name, size, md5, terminal_file_edit_time FROM f_user_file WHERE file_name LIKE '%.note' AND is_active = 'Y';" 2>/dev/null)
 
-    # 1 minute in milliseconds (to bump edit time slightly, preserving history)
-    local one_minute_ms=60000
+    # 1 second in milliseconds (sufficient to win sync - MD5 also changes)
+    local one_second_ms=1000
 
     while IFS=$'\t' read -r id filename dbsize dbmd5 db_edit_time; do
         [ -z "$id" ] && continue
@@ -225,12 +225,13 @@ sync_supernote_database() {
             # Update if: size changed, MD5 changed, OR terminal_file_edit_time is 0/missing
             if [ "$disksize" != "$dbsize" ] || [ "$diskmd5" != "$dbmd5" ] || [ "$db_edit_time" = "0" ] || [ -z "$db_edit_time" ]; then
                 log_info "  Updating: $filename"
-                # Preserve file history: bump edit time by 1 minute instead of setting to NOW
+                # Preserve file history: bump edit time by 1 second instead of setting to NOW
                 # This triggers sync while keeping the file's original "last edited" context
+                # 1 second is sufficient since MD5 also changes
                 local new_edit_time
                 if [ -n "$db_edit_time" ] && [ "$db_edit_time" != "0" ]; then
-                    # Add 1 minute to existing edit time
-                    new_edit_time=$((db_edit_time + one_minute_ms))
+                    # Add 1 second to existing edit time
+                    new_edit_time=$((db_edit_time + one_second_ms))
                 else
                     # No existing time, use current time
                     new_edit_time=$(($(date +%s) * 1000))

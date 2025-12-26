@@ -32,7 +32,7 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 - **Accurate bounding boxes**: Word-level bounding boxes enable search highlighting on device
 - **Smart tracking**: SQLite database tracks file hashes to avoid reprocessing unchanged files
 - **Backup protection**: Creates timestamped backups before modifying any file
-- **Sync server coordination**: Optionally stops Supernote sync server during processing to prevent conflicts
+- **Live sync server support**: Updates sync database while server runs (no restart needed)
 - **Proper coordinate system**: Uses device's native coordinate system (PNG pixels ÷ 11.9) for perfect highlighting
 - **Battery-friendly**: TYPE='0' configuration prevents device from re-OCRing after pen strokes
 
@@ -95,22 +95,16 @@ You need the OCR API server running locally. See [OCR API Setup](#ocr-api-setup)
 
 ### 4. Run OCR Enhancement
 
-**If you DON'T use a Supernote sync server** (manual file transfer):
 ```bash
 docker compose run --rm ocr-enhancer python /app/main.py
 ```
 
-**If you USE a Supernote sync server** (REQUIRED to prevent file corruption):
-```bash
-./run-with-sync-control.sh
-```
+This works with or without a sync server running. The OCR enhancer:
+- Skips files that haven't changed (fast no-op when nothing to process)
+- Updates the sync database atomically while the server runs
+- Bumps file timestamps by 1 second so your OCR'd files win the next sync
 
-> **WARNING**: Running OCR enhancement while the sync server is active can corrupt your .note files. The `run-with-sync-control.sh` script automatically stops the sync server, runs OCR, syncs the database, and restarts the server.
-
-**Dry run** (see what would happen):
-```bash
-./run-with-sync-control.sh --dry-run
-```
+> **Note**: The sync server does NOT need to be stopped. MariaDB handles concurrent access safely, and the sync protocol is stateless. See [Architecture: Why No Server Restart?](#architecture-why-no-server-restart) for details.
 
 ## OCR API Setup
 
@@ -230,6 +224,32 @@ uv remove ocrmac && uv add ocrmac
 - `LANG='none'` causes "redownload language" prompt (never use)
 - `LANG=''` (empty) works but provides no benefit over `LANG='en_US'`
 - `RECOGNSTATUS` value doesn't affect device behavior (new pen strokes always trigger OCR with TYPE='1')
+
+### Architecture: Why No Server Restart?
+
+Previous versions stopped the sync server during OCR processing. This is no longer necessary because:
+
+**1. MariaDB handles concurrent access safely**
+- Row-level locking prevents simultaneous writes to the same record
+- ACID transactions ensure data consistency
+- Our UPDATE statements are single-row atomic operations
+
+**2. The sync protocol is stateless**
+- Each device sync is a fresh request-response cycle
+- No long-running transactions span multiple requests
+- Updated database values are seen immediately on next sync
+
+**3. File-level conflicts are handled by timestamps**
+- We bump `terminal_file_edit_time` by 1 second after OCR injection
+- Combined with the new MD5 hash, this signals "local file is newer"
+- The sync server tells devices to download our OCR'd version
+
+**4. Graceful no-op for unchanged files**
+- SQLite tracks file hashes locally
+- Files that haven't changed are skipped in milliseconds
+- Running every 10 minutes adds negligible overhead
+
+This architecture allows frequent OCR runs (every 10 minutes) without service interruption or database corruption risk.
 
 ### Critical: Supernote Coordinate System Discovery
 
@@ -385,51 +405,61 @@ Add this line to your crontab:
 
 ## Supernote Cloud / Sync Server
 
-If you use a **self-hosted Supernote Cloud sync server** (like [Supernote-Private-Cloud](https://github.com/nickian/Supernote-Private-Cloud)), use this mode. This is the **default** when sync server settings are configured.
+If you use a **self-hosted Supernote Cloud sync server** (like [Supernote-Private-Cloud](https://github.com/nickian/Supernote-Private-Cloud)), this mode works seamlessly. The OCR enhancer updates the sync database while the server runs - no restart needed.
 
-### Do I need this?
+### Do I need special configuration?
 
-- **If you manually transfer files** (USB, file manager): You don't need a sync server. Just point `SUPERNOTE_DATA_PATH` to your .note files.
+- **If you manually transfer files** (USB, file manager): No sync server needed. Just point `SUPERNOTE_DATA_PATH` to your .note files.
 - **If you use the Mac app**: See [Supernote Mac App](#supernote-mac-app) section above.
-- **If you use a self-hosted sync server**: You need to coordinate with it to prevent conflicts.
+- **If you use a self-hosted sync server**: Just run the OCR enhancer - it updates the database automatically.
 
-### What is the Supernote Sync Server?
+### How It Works
 
-The [Supernote Private Cloud](https://github.com/nickian/Supernote-Private-Cloud) or similar self-hosted sync server syncs .note files between your device and Mac. When this tool modifies .note files (injecting OCR), the sync server's database becomes out of sync with the filesystem, causing conflicts.
+When OCR modifies a .note file, the enhancer updates the sync server's MariaDB database:
+- Sets new `size` and `md5` hash
+- Bumps `terminal_file_edit_time` by 1 second (so your OCR'd version wins the next sync)
 
-### Sync Server Coordination
+This happens atomically via Docker socket access to the MariaDB container.
 
-The `run-with-sync-control.sh` script handles this automatically:
-
-1. Stops the sync server before processing
-2. Runs the OCR enhancer
-3. Updates the sync server's MariaDB database with new file sizes/hashes
-4. Restarts the sync server
+### Configuration
 
 Configure in `.env.local`:
 ```bash
-# Path to your sync server's docker-compose.yml
+# Path to your sync server's docker-compose.yml (for container access)
 SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
 
 # Path to your sync server's .env (contains database password)
 SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
 ```
 
-If not using a sync server, leave these blank and run directly:
+### Scheduling Personal Cloud OCR (Container Cron)
+
+The container runs a cron job every 10 minutes by default. This is safe because:
+- Files that haven't changed are skipped (fast hash comparison)
+- Database updates are atomic (no corruption risk)
+- The sync server keeps running (no service interruption)
+
+To use container-based cron:
 ```bash
-docker compose run --rm ocr-enhancer python /app/main.py
+# Start the container (runs cron daemon)
+docker compose up -d
+
+# View logs
+docker compose logs -f ocr-enhancer
 ```
 
-### Scheduling Personal Cloud OCR (Cron)
+The cron schedule is in `config/crontab` (default: every 10 minutes).
 
-For automated scheduling with Personal Cloud, use `run-with-sync-control.sh` from your host's crontab:
+### Legacy: Manual Sync Control
+
+The `run-with-sync-control.sh` script is still available for manual runs with explicit sync server control:
 
 ```bash
-# Add to crontab (crontab -e)
-0 0 * * * /path/to/supernote-ocr-enhancer/run-with-sync-control.sh >> /tmp/ocr-enhancer.log 2>&1
+./run-with-sync-control.sh           # Stops server, runs OCR, restarts server
+./run-with-sync-control.sh --dry-run # Preview what would happen
 ```
 
-> **Note**: Container-based cron (`config/crontab`) requires additional Docker volume mounts for sync server coordination. See comments in `docker-compose.yml` for manual setup.
+This is no longer required but may be preferred for initial testing.
 
 ---
 
@@ -515,7 +545,11 @@ Vision Framework OCR uses full-resolution images (1920x2560) and returns pixel c
 
 ### Sync conflicts
 
-Always use `./run-with-sync-control.sh` if you have a sync server running.
+The OCR enhancer updates the sync database atomically while the server runs. If you see sync issues:
+
+1. Verify the database password in `SYNC_SERVER_ENV` is correct
+2. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
+3. The `terminal_file_edit_time` bump (+1 second) ensures your OCR'd files win the sync
 
 ## Project Structure
 
@@ -534,7 +568,7 @@ supernote-ocr-enhancer/
 │   ├── note_processor.py     # .note file handling
 │   └── sync_handlers.py      # Sync database handlers (Mac app & Personal Cloud)
 ├── config/
-│   └── crontab               # Cron schedule for Docker container (Personal Cloud)
+│   └── crontab               # Cron schedule (every 10 min) for Docker container
 ├── examples/
 │   └── server.py             # OCR API server (copy to ~/services/ocr-api/)
 ├── scripts/
