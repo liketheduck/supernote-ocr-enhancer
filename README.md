@@ -76,12 +76,12 @@ SUPERNOTE_DATA_PATH=/path/to/your/supernote/data
 
 **Optional** - Only if using a self-hosted Supernote Cloud sync server:
 ```bash
-# Uncomment and set these ONLY if you use a self-hosted sync server
-# SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
-# SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
+# Enable Personal Cloud mode and provide MySQL password
+STORAGE_MODE=personal_cloud
+MYSQL_PASSWORD=your_mysql_password  # Get with: docker exec supernote-mariadb env | grep MYSQL_PASSWORD
 ```
 
-> **Note**: If you don't use a sync server (manual file transfer or Mac app), leave the sync server settings commented out.
+> **Note**: If you don't use a sync server (manual file transfer or Mac app), leave these settings out.
 
 ### 2. Build the Container
 
@@ -430,11 +430,12 @@ This happens atomically via Docker socket access to the MariaDB container.
 
 Configure in `.env.local`:
 ```bash
-# Path to your sync server's docker-compose.yml (for container access)
-SYNC_SERVER_COMPOSE=/path/to/supernote-cloud/docker-compose.yml
+# Enable Personal Cloud sync mode
+STORAGE_MODE=personal_cloud
 
-# Path to your sync server's .env (contains database password)
-SYNC_SERVER_ENV=/path/to/supernote-cloud/.env
+# MySQL password from your sync server's MariaDB container
+# Find it with: docker exec supernote-mariadb env | grep MYSQL_PASSWORD
+MYSQL_PASSWORD=your_mysql_password_here
 ```
 
 ### Scheduling Personal Cloud OCR (Container Cron)
@@ -554,9 +555,10 @@ Vision Framework OCR uses full-resolution images (1920x2560) and returns pixel c
 
 The OCR enhancer updates the sync database atomically while the server runs. If you see sync issues:
 
-1. Verify the database password in `SYNC_SERVER_ENV` is correct
-2. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
-3. The `terminal_file_edit_time` bump (+1 second) ensures your OCR'd files win the sync
+1. Verify `STORAGE_MODE=personal_cloud` is set in `.env.local`
+2. Verify `MYSQL_PASSWORD` matches your MariaDB container's password
+3. Check that the MariaDB container is accessible: `docker exec supernote-mariadb mysqladmin ping`
+4. The `terminal_file_edit_time` bump (+1 second) ensures your OCR'd files win the sync
 
 ## Project Structure
 
