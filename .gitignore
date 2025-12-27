@@ -80,3 +80,4 @@ app/examine_note_flags.py
 
 # Usability report (generated, contains analysis)
 USABILITY_REPORT.md
+data/model-comparison-7b-vs-3b.md

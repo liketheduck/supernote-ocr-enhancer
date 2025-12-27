@@ -247,18 +247,19 @@ curl http://localhost:8100/health
 4. **OCR**: Sends full-resolution images to Apple Vision Framework via OCR API for word-level text recognition with pixel-accurate bounding boxes
 5. **Transform**: Converts Vision Framework coordinates (PNG pixels) to Supernote's coordinate system (PNG pixels ÷ 11.9)
 6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block with proper coordinate format
-7. **Enable search**: Sets `FILE_RECOGN_TYPE=1` and `FILE_RECOGN_LANGUAGE=en_US` so device uses OCR for search and highlighting
+7. **Configure device**: Sets `FILE_RECOGN_TYPE` (default `0`) and `FILE_RECOGN_LANGUAGE=en_US` for search compatibility
 
 ### FILE_RECOGN_TYPE: What It Actually Controls
 
 `FILE_RECOGN_TYPE` controls **realtime recognition during writing**, NOT search capability:
 
-| Setting | Device OCRs While Writing? | Search Works? | Our Choice |
-|---------|---------------------------|---------------|------------|
-| TYPE='0' | ❌ No | ✅ Yes (if OCR data exists) | **✅ Default** |
-| TYPE='1' | ✅ Yes (realtime OCR) | ✅ Yes | Optional |
+| Setting | Device OCRs While Writing? | Search Works? | Description |
+|---------|---------------------------|---------------|-------------|
+| `0` | ❌ No | ✅ Yes (if OCR data exists) | **Default** - Preserves our Vision OCR |
+| `1` | ✅ Yes (realtime OCR) | ✅ Yes | Device OCRs new strokes as you write |
+| `keep` | (unchanged) | ✅ Yes | Preserves whatever the file had before |
 
-**Key insight**: Files with TYPE='0' are still fully searchable if they have RECOGNTEXT data. We tested this with Example.note and Another.note - both have TYPE='0' and are searchable.
+**Key insight**: Files with TYPE='0' are still fully searchable if they have RECOGNTEXT data. The TYPE setting only controls whether the device does realtime OCR while you're writing - it doesn't affect search.
 
 **Why we use TYPE='0' (default):**
 - Prevents device from overwriting our high-quality Vision OCR
@@ -567,16 +568,12 @@ Files are **skipped** when:
 
 **Background**: Supernote devices have "Real-time Recognition" controlled by `FILE_RECOGN_TYPE` in the .note file header. This setting controls whether the device performs OCR while you write.
 
-**Our approach**: We set `FILE_RECOGN_TYPE=1` to enable device OCR for new content:
-- ✅ Search and highlighting work for all OCR text (regardless of TYPE setting)
-- ✅ Device continues to OCR new pen strokes you add
+**Our approach**: We set `FILE_RECOGN_TYPE=0` by default to preserve our high-quality Vision OCR:
+- ✅ Search and highlighting work for all OCR text
+- ✅ Device won't overwrite our OCR with lower-quality realtime OCR
+- ✅ New edits are OCR'd by our enhancer on the next hourly sync
 
-**Why this is acceptable**:
-1. Device only re-OCRs pages you actively edit (not all pages)
-2. Pages with `RECOGNSTATUS=1` and no new content keep our better OCR
-3. Even if device re-OCRs after edits, our enhancer will reprocess on next sync
-
-**Note**: You could set TYPE='0' to disable device OCR entirely, and search would still work for our injected OCR. However, we recommend TYPE='1' so new content gets basic OCR until our enhancer runs.
+**Alternative**: Set `FILE_RECOGN_TYPE=1` in `.env.local` if you want the device to do realtime OCR as you write. This gives immediate (but lower quality) searchability for new strokes, which our enhancer will improve on next sync.
 
 ## Performance
 
