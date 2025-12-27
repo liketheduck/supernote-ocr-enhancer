@@ -49,7 +49,7 @@ STORAGE_MODE = os.getenv("STORAGE_MODE", "")
 MACAPP_DATABASE_PATH = os.getenv("MACAPP_DATABASE_PATH", "")
 MACAPP_NOTES_PATH = os.getenv("MACAPP_NOTES_PATH", "")
 # FILE_RECOGN_TYPE: "0" = no device OCR, "1" = device OCR enabled, "keep" = preserve existing
-FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "1")
+FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "0")
 SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
 SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
 DATA_PATH = Path("/app/data")

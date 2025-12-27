@@ -237,7 +237,7 @@ curl http://localhost:8100/health
 | `WRITE_TO_NOTE` | `true` | Write OCR data back to files |
 | `CREATE_BACKUPS` | `true` | Create backups before modifying |
 | `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
-| `FILE_RECOGN_TYPE` | `1` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve |
+| `FILE_RECOGN_TYPE` | `0` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve |
 
 ## How It Works
 
@@ -255,21 +255,27 @@ curl http://localhost:8100/health
 
 | Setting | Device OCRs While Writing? | Search Works? | Our Choice |
 |---------|---------------------------|---------------|------------|
-| TYPE='1' | ✅ Yes (realtime OCR) | ✅ Yes | **✅ Recommended** |
-| TYPE='0' | ❌ No | ✅ Yes (if OCR data exists) | Works, but no new OCR |
+| TYPE='0' | ❌ No | ✅ Yes (if OCR data exists) | **✅ Default** |
+| TYPE='1' | ✅ Yes (realtime OCR) | ✅ Yes | Optional |
 
 **Key insight**: Files with TYPE='0' are still fully searchable if they have RECOGNTEXT data. We tested this with Example.note and Another.note - both have TYPE='0' and are searchable.
 
-**Why we use TYPE='1':**
-- Device continues to OCR new pen strokes you add
-- Our injected OCR works regardless of TYPE setting
-- If user edits a page, device adds new OCR, which we improve on next sync
+**Why we use TYPE='0' (default):**
+- Prevents device from overwriting our high-quality Vision OCR
+- Search still works perfectly (RECOGNTEXT data is preserved)
+- Reduces unnecessary processing on the device
 
 **The workflow:**
-1. You write on device → device does basic OCR (if TYPE='1')
-2. File syncs to server → our enhancer applies better Vision OCR
-3. File syncs back to device → device uses our better OCR for search
-4. If you edit that page later → device re-OCRs just that page → next sync → we fix it again
+1. You write on device → no realtime OCR (TYPE='0')
+2. File syncs to server → our enhancer applies Vision OCR
+3. File syncs back to device → device uses our OCR for search
+4. New edits sync → we OCR them on next hourly run
+
+**To enable device OCR** (if you want realtime recognition while writing):
+```bash
+# In .env.local
+FILE_RECOGN_TYPE=1
+```
 
 **Testing notes**:
 - `LANG='none'` causes "redownload language" prompt (never use)
