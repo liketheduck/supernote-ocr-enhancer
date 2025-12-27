@@ -99,6 +99,59 @@ def extract_all_pages(notebook: sn.Notebook) -> List[PageData]:
     return pages
 
 
+def _group_words_into_lines(text_blocks: List, line_threshold_ratio: float = 0.5) -> List[List]:
+    """
+    Group text blocks into lines based on Y-coordinate proximity.
+
+    Args:
+        text_blocks: List of TextBlock objects with bbox [left, top, right, bottom]
+        line_threshold_ratio: Fraction of average word height to use as line break threshold
+
+    Returns:
+        List of lines, where each line is a list of TextBlock objects sorted left-to-right
+    """
+    if not text_blocks:
+        return []
+
+    # Filter out empty blocks and get valid ones with their Y coordinates
+    valid_blocks = [(block, block.bbox[1]) for block in text_blocks if block.text.strip()]
+    if not valid_blocks:
+        return []
+
+    # Sort by Y coordinate (top to bottom)
+    valid_blocks.sort(key=lambda x: x[1])
+
+    # Calculate average word height for threshold
+    heights = [block.bbox[3] - block.bbox[1] for block, _ in valid_blocks]
+    avg_height = sum(heights) / len(heights) if heights else 20
+    line_threshold = avg_height * line_threshold_ratio
+
+    # Group into lines
+    lines = []
+    current_line = [valid_blocks[0][0]]
+    current_y = valid_blocks[0][1]
+
+    for block, y in valid_blocks[1:]:
+        # If Y coordinate differs by more than threshold, start new line
+        if abs(y - current_y) > line_threshold:
+            # Sort current line by X coordinate before adding
+            current_line.sort(key=lambda b: b.bbox[0])
+            lines.append(current_line)
+            current_line = [block]
+            current_y = y
+        else:
+            current_line.append(block)
+            # Update current_y to average of line (helps with slight variations)
+            current_y = (current_y + y) / 2
+
+    # Don't forget the last line
+    if current_line:
+        current_line.sort(key=lambda b: b.bbox[0])
+        lines.append(current_line)
+
+    return lines
+
+
 def convert_ocr_to_supernote_format(
     ocr_result: OCRResult,
     original_width: int,
@@ -107,19 +160,13 @@ def convert_ocr_to_supernote_format(
     """
     Convert OCR result to Supernote's recognition format (base64-encoded JSON).
 
-    The Supernote format:
+    The Supernote format supports multiple Text elements for line breaks:
     {
         "elements": [
             {"type": "Raw Content"},
-            {
-                "type": "Text",
-                "label": "full text",
-                "words": [
-                    {"bounding-box": {"x": ..., "y": ..., "width": ..., "height": ...}, "label": "word"},
-                    {"label": " "},
-                    ...
-                ]
-            }
+            {"type": "Text", "label": "line 1 text", "words": [...]},
+            {"type": "Text", "label": "line 2 text", "words": [...]},
+            ...
         ],
         "type": "Text"
     }
@@ -133,54 +180,66 @@ def convert_ocr_to_supernote_format(
     # Supernote coordinate scaling factor (discovered via device OCR analysis)
     SUPERNOTE_SCALE_FACTOR = 11.9
 
-    words = []
+    # Group words into lines based on Y-coordinate
+    lines = _group_words_into_lines(ocr_result.text_blocks)
 
-    # Vision Framework returns word-level text blocks with bboxes in PNG pixels
-    # bbox format: [left, top, right, bottom] in pixels
-    for i, block in enumerate(ocr_result.text_blocks):
-        text = block.text.strip()
-        if not text:
-            continue
+    elements = [{"type": "Raw Content"}]
+    line_texts = []
 
-        # bbox format: [left, top, right, bottom] in PNG pixels
-        left, top, right, bottom = block.bbox
+    for line_blocks in lines:
+        words = []
+        line_text_parts = []
 
-        # Convert to Supernote's scaled coordinate system
-        # Divide by 11.9 to match device's native coordinate system
-        x = float(left) / SUPERNOTE_SCALE_FACTOR
-        y = float(top) / SUPERNOTE_SCALE_FACTOR
-        width = float(right - left) / SUPERNOTE_SCALE_FACTOR
-        height = float(bottom - top) / SUPERNOTE_SCALE_FACTOR
+        for i, block in enumerate(line_blocks):
+            text = block.text.strip()
+            if not text:
+                continue
 
-        # Each block from Vision is already a word (or word group)
-        words.append({
-            "bounding-box": {
-                "x": round(x, 2),
-                "y": round(y, 2),
-                "width": round(width, 2),
-                "height": round(height, 2)
-            },
-            "label": text
-        })
+            line_text_parts.append(text)
 
-        # Add space after each word (except last)
-        if i < len(ocr_result.text_blocks) - 1:
-            words.append({"label": " "})
+            # bbox format: [left, top, right, bottom] in PNG pixels
+            left, top, right, bottom = block.bbox
+
+            # Convert to Supernote's scaled coordinate system
+            x = float(left) / SUPERNOTE_SCALE_FACTOR
+            y = float(top) / SUPERNOTE_SCALE_FACTOR
+            width = float(right - left) / SUPERNOTE_SCALE_FACTOR
+            height = float(bottom - top) / SUPERNOTE_SCALE_FACTOR
+
+            words.append({
+                "bounding-box": {
+                    "x": round(x, 2),
+                    "y": round(y, 2),
+                    "width": round(width, 2),
+                    "height": round(height, 2)
+                },
+                "label": text
+            })
+
+            # Add space after each word (except last in line)
+            if i < len(line_blocks) - 1:
+                words.append({"label": " "})
+
+        if words:
+            line_text = " ".join(line_text_parts)
+            line_texts.append(line_text)
+            elements.append({
+                "type": "Text",
+                "label": line_text,
+                "words": words
+            })
+
+    # Build full text with newlines between lines
+    full_text_with_breaks = "\n".join(line_texts)
 
     recogn_data = {
-        "elements": [
-            {"type": "Raw Content"},
-            {
-                "type": "Text",
-                "label": ocr_result.full_text,
-                "words": words
-            }
-        ],
+        "elements": elements,
         "type": "Text"
     }
 
     # Encode as base64
     json_str = json.dumps(recogn_data, ensure_ascii=False)
+    logger.debug(f"Generated recognition data: {len(lines)} lines, {len(full_text_with_breaks)} chars")
     return base64.b64encode(json_str.encode('utf-8'))
 
 
@@ -269,17 +328,21 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
     This is a modified version of sn.reconstruct() that properly
     includes recognition text blocks and enables search highlighting.
 
-    FILE_RECOGN_TYPE controls device behavior:
-    - TYPE='1' = realtime recognition ON = device uses OCR for search/highlighting
-    - TYPE='0' = realtime recognition OFF = device ignores OCR data for search
+    FILE_RECOGN_TYPE controls REALTIME recognition during writing:
+    - TYPE='1' = realtime recognition ON = device performs OCR while you write
+    - TYPE='0' = realtime recognition OFF = device doesn't do realtime OCR
 
-    We use TYPE='1' to enable search. The device may re-OCR after new pen strokes,
-    but our injected OCR for existing content remains searchable.
+    IMPORTANT: Both TYPE values allow searching existing OCR data!
+    Files with TYPE='0' are still searchable if they have RECOGNTEXT data.
+    TYPE only controls whether device adds NEW OCR while writing.
+
+    We use TYPE='1' so the device continues to OCR new pen strokes.
+    Our injected OCR for existing content remains searchable regardless.
 
     Args:
         notebook: The notebook to reconstruct
         enable_highlighting: If True, set FILE_RECOGN_TYPE to '1' to enable
-            search highlighting on device (default: True)
+            device realtime OCR for new content (default: True)
     """
     expected_signature = parser.SupernoteXParser.SN_SIGNATURES[-1]
     metadata = notebook.get_metadata()
@@ -297,11 +360,11 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
             logger.info("Setting recognition language (FILE_RECOGN_LANGUAGE -> en_US)")
             metadata.header['FILE_RECOGN_LANGUAGE'] = 'en_US'
 
-        # Enable recognition for search highlighting
-        # TYPE='1' enables device to use OCR data for search and highlighting
-        # TYPE='0' disables search entirely (tested 2025-12-26)
+        # Enable realtime recognition for new content
+        # TYPE='1' = device performs OCR while writing (recommended)
+        # TYPE='0' = no realtime OCR, but existing OCR data still searchable
         if enable_highlighting:
-            logger.info("Enabling search highlighting (FILE_RECOGN_TYPE -> 1)")
+            logger.info("Enabling realtime recognition (FILE_RECOGN_TYPE -> 1)")
             metadata.header['FILE_RECOGN_TYPE'] = '1'
 
     builder = manip.NotebookBuilder()
