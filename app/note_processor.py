@@ -321,7 +321,7 @@ def pack_pages_with_recognition(builder, notebook, offset=0):
         builder.append(f'PAGE{page_number}/metadata', page_metadata_block)
 
 
-def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: bool = True) -> bytes:
+def reconstruct_with_recognition(notebook: sn.Notebook, recogn_type: str = "1") -> bytes:
     """
     Reconstruct a notebook binary with recognition data.
 
@@ -336,13 +336,12 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
     Files with TYPE='0' are still searchable if they have RECOGNTEXT data.
     TYPE only controls whether device adds NEW OCR while writing.
 
-    We use TYPE='1' so the device continues to OCR new pen strokes.
-    Our injected OCR for existing content remains searchable regardless.
-
     Args:
         notebook: The notebook to reconstruct
-        enable_highlighting: If True, set FILE_RECOGN_TYPE to '1' to enable
-            device realtime OCR for new content (default: True)
+        recogn_type: FILE_RECOGN_TYPE value to set:
+            - "0" = disable device realtime OCR
+            - "1" = enable device realtime OCR (default)
+            - "keep" = preserve existing value from file
     """
     expected_signature = parser.SupernoteXParser.SN_SIGNATURES[-1]
     metadata = notebook.get_metadata()
@@ -353,18 +352,25 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
             f'({metadata.signature} != {expected_signature})'
         )
 
-    # Set recognition language and type (both required for highlighting)
+    # Set recognition language and type
     if hasattr(metadata, 'header') and isinstance(metadata.header, dict):
         # Set language to en_US (required for device to use OCR data)
         if metadata.header.get('FILE_RECOGN_LANGUAGE') != 'en_US':
             logger.info("Setting recognition language (FILE_RECOGN_LANGUAGE -> en_US)")
             metadata.header['FILE_RECOGN_LANGUAGE'] = 'en_US'
 
-        # Enable realtime recognition for new content
-        # TYPE='1' = device performs OCR while writing (recommended)
+        # Handle FILE_RECOGN_TYPE based on user preference
+        # TYPE='1' = device performs OCR while writing
         # TYPE='0' = no realtime OCR, but existing OCR data still searchable
-        if enable_highlighting:
-            logger.info("Enabling realtime recognition (FILE_RECOGN_TYPE -> 1)")
+        current_type = metadata.header.get('FILE_RECOGN_TYPE', '1')
+        if recogn_type == "keep":
+            logger.debug(f"Keeping existing FILE_RECOGN_TYPE={current_type}")
+        elif recogn_type in ("0", "1"):
+            if current_type != recogn_type:
+                logger.info(f"Setting FILE_RECOGN_TYPE: {current_type} -> {recogn_type}")
+                metadata.header['FILE_RECOGN_TYPE'] = recogn_type
+        else:
+            logger.warning(f"Invalid recogn_type '{recogn_type}', defaulting to '1'")
             metadata.header['FILE_RECOGN_TYPE'] = '1'
 
     builder = manip.NotebookBuilder()
@@ -400,7 +406,8 @@ def reconstruct_with_recognition(notebook: sn.Notebook, enable_highlighting: boo
 def inject_ocr_results(
     note_path: Path,
     page_results: Dict[int, Tuple[OCRResult, int, int]],
-    backup_dir: Optional[Path] = None
+    backup_dir: Optional[Path] = None,
+    recogn_type: str = "1"
 ) -> bool:
     """
     Inject OCR results into a .note file.
@@ -409,6 +416,7 @@ def inject_ocr_results(
         note_path: Path to the .note file
         page_results: Dict mapping page_number -> (OCRResult, image_width, image_height)
         backup_dir: Optional directory for backups
+        recogn_type: FILE_RECOGN_TYPE setting ("0", "1", or "keep")
 
     Returns:
         True if successful
@@ -440,7 +448,7 @@ def inject_ocr_results(
 
     # Reconstruct the file
     try:
-        reconstructed = reconstruct_with_recognition(notebook)
+        reconstructed = reconstruct_with_recognition(notebook, recogn_type=recogn_type)
 
         # Save original timestamps before writing
         original_stat = note_path.stat()
