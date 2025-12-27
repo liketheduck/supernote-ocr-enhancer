@@ -48,6 +48,8 @@ RESET_DATABASE = os.getenv("RESET_DATABASE", "false").lower() == "true"
 STORAGE_MODE = os.getenv("STORAGE_MODE", "")
 MACAPP_DATABASE_PATH = os.getenv("MACAPP_DATABASE_PATH", "")
 MACAPP_NOTES_PATH = os.getenv("MACAPP_NOTES_PATH", "")
+# FILE_RECOGN_TYPE: "0" = no device OCR, "1" = device OCR enabled, "keep" = preserve existing
+FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "1")
 SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
 SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
 DATA_PATH = Path("/app/data")
@@ -238,7 +240,7 @@ def process_note_file(note_path: Path) -> ProcessingResult:
         if WRITE_TO_NOTE and page_results:
             try:
                 backup_dir = BACKUP_PATH if CREATE_BACKUPS else None
-                inject_ocr_results(note_path, page_results, backup_dir)
+                inject_ocr_results(note_path, page_results, backup_dir, recogn_type=FILE_RECOGN_TYPE)
                 logger.info(f"  Injected OCR data into {len(page_results)} pages")
 
                 # IMPORTANT: Recompute hash after injection so we don't reprocess
@@ -390,6 +392,7 @@ def main():
     logger.info(f"Write to .note files: {WRITE_TO_NOTE}")
     logger.info(f"Create backups: {CREATE_BACKUPS}")
     logger.info(f"Reset database: {RESET_DATABASE}")
+    logger.info(f"FILE_RECOGN_TYPE: {FILE_RECOGN_TYPE}")
 
     # Ensure directories exist
     DATA_PATH.mkdir(parents=True, exist_ok=True)

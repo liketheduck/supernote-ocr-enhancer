@@ -195,6 +195,7 @@ uv remove ocrmac && uv add ocrmac
 | `WRITE_TO_NOTE` | `true` | Write OCR data back to files |
 | `CREATE_BACKUPS` | `true` | Create backups before modifying |
 | `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
+| `FILE_RECOGN_TYPE` | `1` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve |
 
 ## How It Works
 
