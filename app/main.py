@@ -300,7 +300,9 @@ def run_processing():
     # Check OCR API availability
     logger.info("Checking OCR API availability...")
     if not ocr_client.health_check():
-        logger.error("OCR API not available. Start it with: ./scripts/start.sh")
+        logger.error("OCR API not available at %s", OCR_API_URL)
+        logger.error("Start it with: ./scripts/start-ocr-api.sh")
+        logger.error("Or install always-on mode: ./scripts/install-launchd.sh")
         processing_state["status"] = "error"
         processing_state["errors"].append("OCR API not available")
         return []

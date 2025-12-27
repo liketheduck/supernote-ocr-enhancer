@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Supernote OCR API LaunchAgent
+
+  This keeps the OCR API server running automatically:
+  - Starts on login
+  - Restarts if it crashes
+  - Runs in background (no terminal window needed)
+
+  Install with: ./scripts/install-launchd.sh
+
+  Resource usage when idle:
+  - RAM: ~50-100MB (Vision Framework only)
+  - RAM: ~8GB if Qwen model loads (optional, for /ocr endpoint)
+  - CPU: 0% when not processing
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.supernote.ocr-api</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__UV_PATH__</string>
+        <string>run</string>
+        <string>python</string>
+        <string>server.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__OCR_API_DIR__</string>
+
+    <!-- Start automatically on login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart if it crashes -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Log output for debugging -->
+    <key>StandardOutPath</key>
+    <string>__OCR_API_DIR__/logs/launchd-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__OCR_API_DIR__/logs/launchd-stderr.log</string>
+
+    <!-- Environment for uv and homebrew -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <!-- Skip loading the heavy Qwen model - Vision Framework is sufficient -->
+        <!-- Uncomment to enable Qwen for /ocr endpoint (uses ~8GB RAM): -->
+        <!-- <key>OCR_MODEL_PATH</key> -->
+        <!-- <string>mlx-community/Qwen2.5-VL-7B-Instruct-8bit</string> -->
+    </dict>
+
+    <!-- Throttle restarts to prevent rapid restart loops -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
