@@ -184,6 +184,48 @@ uv remove ocrmac && uv add ocrmac
 
 `ocrmac` requires macOS 10.15+ and works best on macOS 13+ (Ventura).
 
+### Keeping the OCR API Running
+
+The OCR API must be running for the enhancer to work. Choose one of these options:
+
+#### Option 1: Always-On (Recommended)
+
+Install as a macOS LaunchAgent that starts automatically on login and restarts if it crashes:
+
+```bash
+./scripts/install-launchd.sh
+```
+
+This is the recommended approach because:
+- **Zero maintenance**: Starts automatically, restarts on crash
+- **Always ready**: Hourly cron jobs will always find the API available
+- **Low overhead**: ~50-100MB RAM when idle, 0% CPU
+
+To remove:
+```bash
+./scripts/install-launchd.sh --remove
+```
+
+#### Option 2: Manual Start
+
+Start the OCR API manually when you need it:
+
+```bash
+./scripts/start-ocr-api.sh
+```
+
+This runs in the foreground (Ctrl+C to stop). Use this if you prefer manual control or want to save the ~50MB RAM when not processing.
+
+#### Checking Status
+
+```bash
+# Check if OCR API is running
+./scripts/start-ocr-api.sh --check
+
+# Or directly
+curl http://localhost:8100/health
+```
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -621,12 +663,15 @@ supernote-ocr-enhancer/
 │   ├── note_processor.py     # .note file handling
 │   └── sync_handlers.py      # Sync database handlers (Mac app & Personal Cloud)
 ├── config/
-│   └── crontab               # Cron schedule (every 1 min) for Docker container
+│   ├── crontab               # Cron schedule for Docker container
+│   └── com.supernote.ocr-api.plist.template  # LaunchAgent template
 ├── examples/
 │   └── server.py             # OCR API server (copy to ~/services/ocr-api/)
 ├── scripts/
 │   ├── cron-ocr-job.sh           # Cron job script (runs inside Docker)
 │   ├── cron-macapp-template.sh   # Template for Mac app scheduled OCR (runs on host)
+│   ├── install-launchd.sh        # Install OCR API as LaunchAgent (always-on)
+│   ├── start-ocr-api.sh          # Start OCR API manually (foreground)
 │   ├── compare_ocr.py            # OCR comparison tool
 │   └── extract_ocr_text.py       # OCR backup/export
 └── data/
