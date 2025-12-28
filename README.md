@@ -263,7 +263,9 @@ When `OCR_PDF_LAYERS=true` (default), the enhancer can OCR pages with custom bac
 
 **Existing OCR preserved:** If a PDF layer file already has OCR data (e.g., from external tools or a previous run), the enhancer will skip it rather than re-OCR. This preserves any existing OCR work and avoids unnecessary processing.
 
-**Warning (untested):** If your PDF imported on the Supernote device preserves clickable links, enabling `OCR_PDF_LAYERS` may cause those links to be lost when the file is reconstructed. Set `OCR_PDF_LAYERS=false` if link preservation is critical. Feedback welcome.
+**Automatic recovery:** If pages lose their OCR data (due to sync conflicts or injection failures), the enhancer automatically detects and re-processes only the affected pages. Pages with empty OCR results (no text found) are recognized as complete and won't be repeatedly re-OCR'd.
+
+**Warning (untested):** If your PDF imported on the Supernote device preserves clickable links, enabling `OCR_PDF_LAYERS` may cause those links to be lost when the file is reconstructed. Set `OCR_PDF_LAYERS=false` if link preservation is critical. Note: this only affects PDFs that have NO existing OCR data—files with OCR are skipped entirely. Feedback welcome.
 
 ### FILE_RECOGN_TYPE: What It Actually Controls
 
