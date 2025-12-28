@@ -503,10 +503,10 @@ The container runs cron jobs automatically:
 
 | Schedule | Behavior |
 |----------|----------|
-| Every hour | Skips files uploaded in last 8 hours (conflict prevention) |
-| **3:00 AM** | **Full run** - processes ALL files regardless of upload time |
+| Every hour (:00) | Skips files uploaded in last 8 hours (conflict prevention) |
+| **3:30 AM** | **Full run** - processes ALL files regardless of upload time |
 
-The 3am run is low-risk for conflicts since you're likely asleep and not editing.
+The 3:30am run is low-risk for conflicts since you're likely asleep and not editing.
 
 Additional safeguards:
 - **Age threshold**: Files modified <60 seconds ago are skipped (prevents processing mid-sync)
@@ -642,13 +642,13 @@ We could force server to always win (set timestamp to year 2099), but that would
 **Our solution - skip actively-edited files:**
 
 1. **Skip recently uploaded files**: Files uploaded in the last 8 hours are skipped during hourly runs
-2. **3am full run**: Processes ALL files regardless of upload time (low conflict risk)
+2. **3:30am full run**: Processes ALL files regardless of upload time (low conflict risk)
 3. **Then OCR**: Device's local file is "clean" (no pending edits), only server changed
 4. **Device downloads**: No conflict because only one side changed
 
 **If you still see conflicts:**
 - You edited the file on device after OCR ran but before syncing
-- The 3am run should catch most files safely
+- The 3:30am run should catch most files safely
 - The conflict file contains our OCR version - you can delete it or keep for reference
 
 **Configuration checks:**

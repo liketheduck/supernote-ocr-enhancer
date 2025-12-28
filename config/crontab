@@ -8,8 +8,9 @@ SHELL=/bin/bash
 # - Skips already-processed files (fast hash comparison)
 0 * * * * /app/scripts/cron-ocr-job.sh
 
-# Full OCR run at 3am - processes ALL files regardless of upload time
+# Full OCR run at 3:30am - processes ALL files regardless of upload time
 # Low conflict risk since user is likely asleep
-0 3 * * * SKIP_RECENT_CHECK=true /app/scripts/cron-ocr-job.sh
+# Runs at :30 to avoid overlap with hourly job at :00
+30 3 * * * SKIP_RECENT_CHECK=true /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end
