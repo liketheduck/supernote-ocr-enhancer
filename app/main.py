@@ -319,9 +319,9 @@ def run_processing():
         return []
 
     # Filter out recently uploaded files to prevent sync conflicts
-    # Files uploaded by the device in the last 60 minutes are "actively edited"
+    # Files uploaded by the device in the last 16 hours are "actively edited"
     # and should not be OCR'd until the user is done editing
-    recently_uploaded = sync_handler.get_recently_uploaded_files(minutes=60)
+    recently_uploaded = sync_handler.get_recently_uploaded_files(minutes=960)
     if recently_uploaded:
         original_count = len(note_files)
         note_files = [f for f in note_files if f.name not in recently_uploaded]

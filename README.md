@@ -502,7 +502,7 @@ MYSQL_PASSWORD=your_mysql_password_here
 The container runs a cron job **every hour** by default. This is safe because:
 
 - **Age threshold**: Files modified <60 seconds ago are skipped (prevents processing mid-sync)
-- **Conflict prevention**: Files uploaded in last 60 minutes are skipped (prevents sync conflicts)
+- **Conflict prevention**: Files uploaded in last 16 hours are skipped (prevents sync conflicts)
 - **Hash comparison**: Already-processed files are skipped in milliseconds
 - **Atomic updates**: Database updates are safe while sync server runs
 
@@ -634,14 +634,14 @@ We could force server to always win (set timestamp to year 2099), but that would
 
 **Our solution - skip actively-edited files:**
 
-1. **Skip recently uploaded files**: Files uploaded in the last 60 minutes are "actively edited" and skipped
-2. **Wait for user to finish**: Once 60 minutes pass with no uploads, user is done editing
+1. **Skip recently uploaded files**: Files uploaded in the last 16 hours are "actively edited" and skipped
+2. **Wait for user to finish**: Once 16 hours pass with no uploads, user is done editing
 3. **Then OCR**: Device's local file is "clean" (no pending edits), only server changed
 4. **Device downloads**: No conflict because only one side changed
 
 **If you still see conflicts:**
 - You edited the file on device after OCR ran but before syncing
-- Wait 60+ minutes after your last device edit, then sync
+- Wait 16+ hours after your last device edit, then sync
 - The conflict file contains our OCR version - you can delete it or keep for reference
 
 **Configuration checks:**
