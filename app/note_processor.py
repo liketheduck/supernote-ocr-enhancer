@@ -626,6 +626,26 @@ def inject_ocr_results(
         raise
 
 
+def has_ocr_data(notebook: sn.Notebook, page_number: int) -> bool:
+    """Check if a page has any RECOGNTEXT data (even if empty OCR result)."""
+    if page_number >= len(notebook.pages):
+        return False
+
+    page = notebook.pages[page_number]
+    recogn_text = page.get_recogn_text()
+
+    if not recogn_text or recogn_text == 'None':
+        return False
+
+    try:
+        # Try to decode - if valid base64 JSON, it has OCR data
+        decoded = base64.b64decode(recogn_text).decode('utf-8')
+        json.loads(decoded)
+        return True
+    except Exception:
+        return False
+
+
 def get_existing_ocr_text(notebook: sn.Notebook, page_number: int) -> Optional[str]:
     """Get existing OCR text from a page, if any."""
     if page_number >= len(notebook.pages):

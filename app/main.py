@@ -32,7 +32,8 @@ from note_processor import (
     get_notebook_info,
     extract_page,
     inject_ocr_results,
-    get_existing_ocr_text
+    get_existing_ocr_text,
+    has_ocr_data
 )
 from sync_handlers import create_sync_handler
 
@@ -172,19 +173,44 @@ def process_note_file(note_path: Path) -> ProcessingResult:
         # Check if processing needed
         should_process, reason = db.should_process_file(note_path, file_hash)
         if not should_process:
-            logger.info(f"Skipping {note_path.name}: {reason}")
-            return ProcessingResult(
-                file_path=note_path,
-                success=True,
-                pages_processed=0,
-                pages_skipped=0,
-                total_time_ms=0
-            )
+            # For "already_processed" files, verify all pages actually have OCR data
+            # Pages can lose OCR due to sync conflicts or injection failures
+            # Use has_ocr_data (not get_existing_ocr_text) to include empty OCR results
+            if reason == "already_processed":
+                notebook = load_notebook(note_path)
+                pages_missing_ocr = []
+                for i in range(len(notebook.pages)):
+                    if not has_ocr_data(notebook, i):
+                        pages_missing_ocr.append(i)
+                if pages_missing_ocr:
+                    should_process = True
+                    reason = f"missing_ocr_pages:{pages_missing_ocr}"
+                    logger.info(f"Processing {note_path.name} (reason: {reason})")
+                else:
+                    logger.info(f"Skipping {note_path.name}: {reason}")
+                    return ProcessingResult(
+                        file_path=note_path,
+                        success=True,
+                        pages_processed=0,
+                        pages_skipped=0,
+                        total_time_ms=0
+                    )
+            else:
+                logger.info(f"Skipping {note_path.name}: {reason}")
+                return ProcessingResult(
+                    file_path=note_path,
+                    success=True,
+                    pages_processed=0,
+                    pages_skipped=0,
+                    total_time_ms=0
+                )
+        else:
+            logger.info(f"Processing {note_path.name} (reason: {reason})")
+            notebook = None  # Will be loaded below
 
-        logger.info(f"Processing {note_path.name} (reason: {reason})")
-
-        # Load notebook
-        notebook = load_notebook(note_path)
+        # Load notebook (if not already loaded during OCR verification)
+        if notebook is None:
+            notebook = load_notebook(note_path)
         total_pages = len(notebook.pages)
 
         # Update database
@@ -209,20 +235,24 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                 page_data = extract_page(notebook, page_num, ocr_pdf_layers=OCR_PDF_LAYERS)
                 page_hash = compute_image_hash(page_data.png_bytes)
 
-                # Check if page already processed with same content
-                if db.is_page_processed(note_id, page_num, page_hash):
-                    logger.debug(f"  Page {page_num} unchanged, skipping")
+                # Check if page needs OCR
+                # Use has_ocr_data to check for ANY OCR data (including empty results)
+                page_has_ocr = has_ocr_data(notebook, page_num)
+                hash_matches = db.is_page_processed(note_id, page_num, page_hash)
+
+                if hash_matches and page_has_ocr:
+                    # Page unchanged and has OCR data - skip
+                    logger.debug(f"  Page {page_num} unchanged with OCR, skipping")
                     pages_skipped += 1
                     continue
-
-                # For PDF layer pages, skip if file already has OCR data
-                # (preserves OCR from other sources, e.g., external tools)
-                if page_data.from_bglayer:
-                    existing_ocr = get_existing_ocr_text(notebook, page_num)
-                    if existing_ocr:
-                        logger.info(f"  Page {page_num}: PDF layer already has OCR, skipping")
-                        pages_skipped += 1
-                        continue
+                elif hash_matches and not page_has_ocr:
+                    # Page unchanged but OCR data missing (sync conflict?) - re-OCR
+                    logger.info(f"  Page {page_num}: hash matches but OCR missing, re-processing")
+                elif page_data.from_bglayer and page_has_ocr:
+                    # PDF layer with existing OCR data from external source - preserve it
+                    logger.info(f"  Page {page_num}: PDF layer already has OCR, skipping")
+                    pages_skipped += 1
+                    continue
 
                 # Run OCR with Vision Framework (word-level bounding boxes)
                 logger.info(f"  OCR page {page_num + 1}/{total_pages}...")
