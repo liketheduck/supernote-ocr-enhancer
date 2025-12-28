@@ -35,7 +35,7 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 - **Backup protection**: Creates timestamped backups before modifying any file
 - **Live sync server support**: Updates sync database while server runs (no restart needed)
 - **Proper coordinate system**: Uses device's native coordinate system (PNG pixels ÷ 11.9) for perfect highlighting
-- **Search-enabled**: TYPE='1' configuration allows device to search injected OCR text
+- **Search-enabled**: Injected OCR data is searchable on device (works with any TYPE setting)
 
 ## Performance
 
@@ -237,7 +237,7 @@ curl http://localhost:8100/health
 | `WRITE_TO_NOTE` | `true` | Write OCR data back to files |
 | `CREATE_BACKUPS` | `true` | Create backups before modifying |
 | `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
-| `FILE_RECOGN_TYPE` | `0` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve |
+| `FILE_RECOGN_TYPE` | `0` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve existing setting (OCR still injected) |
 
 ## How It Works
 
@@ -257,7 +257,7 @@ curl http://localhost:8100/health
 |---------|---------------------------|---------------|-------------|
 | `0` | ❌ No | ✅ Yes (if OCR data exists) | **Default** - Preserves our Vision OCR |
 | `1` | ✅ Yes (realtime OCR) | ✅ Yes | Device OCRs new strokes as you write |
-| `keep` | (unchanged) | ✅ Yes | Preserves whatever the file had before |
+| `keep` | (unchanged) | ✅ Yes | Injects OCR but preserves file's existing TYPE setting |
 
 **Key insight**: Files with TYPE='0' are still fully searchable if they have RECOGNTEXT data. The TYPE setting only controls whether the device does realtime OCR while you're writing - it doesn't affect search.
 
