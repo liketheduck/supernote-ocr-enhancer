@@ -215,6 +215,15 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                     pages_skipped += 1
                     continue
 
+                # For PDF layer pages, skip if file already has OCR data
+                # (preserves OCR from other sources, e.g., external tools)
+                if page_data.from_bglayer:
+                    existing_ocr = get_existing_ocr_text(notebook, page_num)
+                    if existing_ocr:
+                        logger.info(f"  Page {page_num}: PDF layer already has OCR, skipping")
+                        pages_skipped += 1
+                        continue
+
                 # Run OCR with Vision Framework (word-level bounding boxes)
                 logger.info(f"  OCR page {page_num + 1}/{total_pages}...")
                 ocr_result = ocr_client.ocr_image_vision(page_data.png_bytes)

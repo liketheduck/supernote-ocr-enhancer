@@ -101,6 +101,7 @@ class PageData:
     image: Image.Image
     width: int
     height: int
+    from_bglayer: bool = False  # True if extracted from PDF/custom background layer
 
 
 @dataclass
@@ -176,7 +177,8 @@ def _extract_bglayer_png(notebook: sn.Notebook, page_number: int) -> Optional[Pa
                         png_bytes=png_bytes,
                         image=img,
                         width=img.size[0],
-                        height=img.size[1]
+                        height=img.size[1],
+                        from_bglayer=True
                     )
         return None
     except Exception as e:

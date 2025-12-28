@@ -261,6 +261,8 @@ When `OCR_PDF_LAYERS=true` (default), the enhancer can OCR pages with custom bac
 
 **How this fixes it:** If supernotelib's standard converter fails (e.g., `UnknownDecodeProtocol`), the enhancer checks if the BGLAYER contains a raw PNG image. If so, it extracts that PNG directly, sends it to the OCR API, and injects the recognized text back into the file. The PDF is now fully searchable on your Supernote device.
 
+**Existing OCR preserved:** If a PDF layer file already has OCR data (e.g., from external tools or a previous run), the enhancer will skip it rather than re-OCR. This preserves any existing OCR work and avoids unnecessary processing.
+
 **Warning (untested):** If your PDF imported on the Supernote device preserves clickable links, enabling `OCR_PDF_LAYERS` may cause those links to be lost when the file is reconstructed. Set `OCR_PDF_LAYERS=false` if link preservation is critical. Feedback welcome.
 
 ### FILE_RECOGN_TYPE: What It Actually Controls
