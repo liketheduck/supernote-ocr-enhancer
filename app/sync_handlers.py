@@ -402,6 +402,9 @@ class PersonalCloudSyncHandler(SyncHandler):
                 #
                 # Edge case: If terminal_file_edit_time is 0, set to current time in ms.
                 # UNIX_TIMESTAMP() * 1000 gives milliseconds since epoch.
+                # Escape single quotes in filename for SQL safety
+                escaped_file_name = file_name.replace("'", "''")
+
                 update_sql = f"""
                     UPDATE f_user_file
                     SET size = {new_size},
@@ -411,7 +414,7 @@ class PersonalCloudSyncHandler(SyncHandler):
                             ELSE terminal_file_edit_time + 1000
                         END,
                         update_time = NOW()
-                    WHERE file_name = '{file_name}' AND is_active = 'Y';
+                    WHERE file_name = '{escaped_file_name}' AND is_active = 'Y';
                 """
 
                 result = subprocess.run(
