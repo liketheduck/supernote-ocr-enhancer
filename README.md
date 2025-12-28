@@ -238,6 +238,7 @@ curl http://localhost:8100/health
 | `CREATE_BACKUPS` | `true` | Create backups before modifying |
 | `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
 | `FILE_RECOGN_TYPE` | `0` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve existing setting (OCR still injected) |
+| `OCR_PDF_LAYERS` | `true` | Extract and OCR embedded images from PDF/custom background layers |
 
 ## How It Works
 
@@ -248,6 +249,17 @@ curl http://localhost:8100/health
 5. **Transform**: Converts Vision Framework coordinates (PNG pixels) to Supernote's coordinate system (PNG pixels ÷ 11.9)
 6. **Inject**: Writes enhanced OCR data into the `.note` file's RECOGNTEXT block with proper coordinate format
 7. **Configure device**: Sets `FILE_RECOGN_TYPE` (default `0`) and `FILE_RECOGN_LANGUAGE=en_US` for search compatibility
+
+### PDF Layer OCR
+
+When `OCR_PDF_LAYERS=true` (default), the enhancer can OCR pages with custom background layers such as:
+- PDF imports
+- Documents created by external programs with embedded PNG backgrounds
+- Any page using a `user_*` style with PNG data in the BGLAYER
+
+**How it works:** If supernotelib's standard converter fails (e.g., `UnknownDecodeProtocol`), the enhancer checks if the BGLAYER contains a raw PNG image. If so, it extracts that PNG directly and sends it to the OCR API.
+
+This enables search on PDF documents imported to Supernote or created by third-party tools.
 
 ### FILE_RECOGN_TYPE: What It Actually Controls
 
@@ -281,6 +293,18 @@ FILE_RECOGN_TYPE=1
 **Testing notes**:
 - `LANG='none'` causes "redownload language" prompt (never use)
 - `RECOGNSTATUS=1` (done) doesn't prevent device re-OCR on edits - TYPE controls realtime behavior
+
+### Preserved Metadata
+
+The OCR injection process preserves important .note file metadata:
+
+| Field | Location | Purpose |
+|-------|----------|---------|
+| `FINALOPERATION_PAGE` | Header | Last viewed page (device resumes here) |
+| `FINALOPERATION_LAYER` | Header | Last active layer |
+| `DIRTY` | Footer | File state tracking (affects page resume behavior) |
+
+The standard supernotelib reconstruction loses footer fields like `DIRTY`. This enhancer uses a custom footer packer to preserve these fields, ensuring the device opens files on the correct page after OCR injection.
 
 ### Architecture: Why No Server Restart?
 

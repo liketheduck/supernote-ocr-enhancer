@@ -50,6 +50,8 @@ MACAPP_DATABASE_PATH = os.getenv("MACAPP_DATABASE_PATH", "")
 MACAPP_NOTES_PATH = os.getenv("MACAPP_NOTES_PATH", "")
 # FILE_RECOGN_TYPE: "0" = no device OCR, "1" = device OCR enabled, "keep" = preserve existing
 FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "0")
+# OCR_PDF_LAYERS: Extract and OCR embedded PNGs from PDF/custom background layers
+OCR_PDF_LAYERS = os.getenv("OCR_PDF_LAYERS", "true").lower() == "true"
 # Skip the recently-uploaded check (for 3am full processing run)
 SKIP_RECENT_CHECK = os.getenv("SKIP_RECENT_CHECK", "false").lower() == "true"
 SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
@@ -198,12 +200,13 @@ def process_note_file(note_path: Path) -> ProcessingResult:
         # Process each page
         pages_processed = 0
         pages_skipped = 0
+        pages_failed = 0
         page_results: Dict[int, Tuple[OCRResult, int, int]] = {}
 
         for page_num in range(total_pages):
             try:
                 # Extract page image
-                page_data = extract_page(notebook, page_num)
+                page_data = extract_page(notebook, page_num, ocr_pdf_layers=OCR_PDF_LAYERS)
                 page_hash = compute_image_hash(page_data.png_bytes)
 
                 # Check if page already processed with same content
@@ -237,6 +240,7 @@ def process_note_file(note_path: Path) -> ProcessingResult:
             except Exception as e:
                 logger.error(f"  Error processing page {page_num}: {e}")
                 processing_state["errors"].append(f"{note_path.name} page {page_num}: {str(e)}")
+                pages_failed += 1
 
         # Inject OCR data back into .note file
         if WRITE_TO_NOTE and page_results:
@@ -260,16 +264,25 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                 logger.error(f"  Failed to inject OCR data: {e}")
                 processing_state["errors"].append(f"{note_path.name} injection: {str(e)}")
 
-        # Update status
-        db.update_status(note_path, 'completed')
-
+        # Update status based on results
         total_time = (time.time() - start_time) * 1000
-        logger.info(f"Completed {note_path.name}: {pages_processed} processed, "
-                   f"{pages_skipped} skipped, {total_time:.0f}ms")
+
+        if pages_processed == 0 and pages_skipped == 0 and pages_failed > 0:
+            # All pages failed to extract (e.g., unsupported format like custom PDF layers)
+            error_msg = f"All {pages_failed} pages failed to extract"
+            db.update_status(note_path, 'extraction_failed', error=error_msg)
+            logger.warning(f"Extraction failed {note_path.name}: {error_msg}")
+        else:
+            db.update_status(note_path, 'completed')
+            logger.info(f"Completed {note_path.name}: {pages_processed} processed, "
+                       f"{pages_skipped} skipped, {pages_failed} failed, {total_time:.0f}ms")
+
+        # Success only if we processed/skipped at least one page, or no pages failed
+        success = not (pages_processed == 0 and pages_skipped == 0 and pages_failed > 0)
 
         return ProcessingResult(
             file_path=note_path,
-            success=True,
+            success=success,
             pages_processed=pages_processed,
             pages_skipped=pages_skipped,
             total_time_ms=total_time
@@ -401,6 +414,7 @@ def main():
     logger.info(f"Create backups: {CREATE_BACKUPS}")
     logger.info(f"Reset database: {RESET_DATABASE}")
     logger.info(f"FILE_RECOGN_TYPE: {FILE_RECOGN_TYPE}")
+    logger.info(f"OCR PDF layers: {OCR_PDF_LAYERS}")
 
     # Ensure directories exist
     DATA_PATH.mkdir(parents=True, exist_ok=True)

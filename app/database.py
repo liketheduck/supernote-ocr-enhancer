@@ -223,6 +223,11 @@ class Database:
         if record.processing_status == 'failed':
             return True, "retry_failed"
 
+        if record.processing_status == 'extraction_failed':
+            # Don't retry extraction failures unless content changed (handled above)
+            # These are files with unsupported formats (e.g., custom PDF layers)
+            return False, "extraction_unsupported"
+
         if record.processing_status == 'completed':
             return False, "already_processed"
 
@@ -374,7 +379,7 @@ class Database:
             row = conn.execute("SELECT COUNT(*) as total FROM note_files").fetchone()
             stats['total_files'] = row['total']
 
-            for status in ['pending', 'processing', 'completed', 'failed']:
+            for status in ['pending', 'processing', 'completed', 'failed', 'extraction_failed']:
                 row = conn.execute(
                     "SELECT COUNT(*) as count FROM note_files WHERE processing_status = ?",
                     (status,)

@@ -20,8 +20,77 @@ import supernotelib.manipulator as manip
 import supernotelib.parser as parser
 
 from ocr_client import OCRResult, TextBlock
+import re
 
 logger = logging.getLogger(__name__)
+
+
+def pack_footer_preserving_extras(builder, notebook):
+    """
+    Custom footer packer that preserves extra fields like DIRTY.
+
+    The standard manip._pack_footer() rebuilds the footer from scratch,
+    losing fields like DIRTY which may affect device behavior (e.g.,
+    which page to open on resume).
+    """
+    metadata = notebook.get_metadata()
+    original_footer = metadata.footer if hasattr(metadata, 'footer') else {}
+
+    # Build footer the same way as manip._pack_footer
+    metadata_footer = {}
+    metadata_footer.setdefault('FILE_FEATURE', builder.get_block_address('__header__'))
+
+    for label in builder.get_labels():
+        if re.match(r'PAGE\d+/metadata', label):
+            address = builder.get_block_address(label)
+            label = label[:-len('/metadata')]
+            metadata_footer.setdefault(label, address)
+
+    for label in builder.get_labels():
+        if re.match(r'TITLE_\d+/metadata', label):
+            address_list = builder.get_duplicate_block_address_list(label)
+            label = label[:-len('/metadata')]
+            if len(address_list) == 1:
+                metadata_footer.setdefault(label, address_list[0])
+            else:
+                metadata_footer[label] = address_list
+
+    for label in builder.get_labels():
+        if re.match(r'KEYWORD_\d+/metadata', label):
+            address_list = builder.get_duplicate_block_address_list(label)
+            label = label[:-len('/metadata')]
+            if len(address_list) == 1:
+                metadata_footer.setdefault(label, address_list[0])
+            else:
+                metadata_footer[label] = address_list
+
+    for label in builder.get_labels():
+        if re.match(r'LINKO_\d+/metadata', label):
+            address_list = builder.get_duplicate_block_address_list(label)
+            label = label[:-len('/metadata')]
+            if len(address_list) == 1:
+                metadata_footer.setdefault(label, address_list[0])
+            else:
+                metadata_footer[label] = address_list
+
+    address = builder.get_block_address('COVER_2')
+    if address == 0:
+        metadata_footer['COVER_0'] = 0
+    else:
+        metadata_footer['COVER_2'] = address
+
+    for label in builder.get_labels():
+        if label.startswith('STYLE_'):
+            address = builder.get_block_address(label)
+            metadata_footer.setdefault(label, address)
+
+    # Preserve DIRTY from original footer (affects device page resume behavior)
+    if 'DIRTY' in original_footer:
+        metadata_footer['DIRTY'] = original_footer['DIRTY']
+        logger.debug(f"Preserving footer DIRTY={original_footer['DIRTY']}")
+
+    footer_block = manip._construct_metadata_block(metadata_footer)
+    builder.append('__footer__', footer_block)
 
 
 @dataclass
@@ -59,32 +128,106 @@ def get_notebook_info(note_path: Path) -> NotebookInfo:
     )
 
 
-def extract_page(notebook: sn.Notebook, page_number: int) -> PageData:
+def _extract_bglayer_png(notebook: sn.Notebook, page_number: int) -> Optional[PageData]:
     """
-    Extract a single page as PNG image.
+    Extract PNG directly from BGLAYER for pages with custom backgrounds.
+
+    Some .note files (e.g., those created with PDF imports) store the page
+    image directly as a PNG in the BGLAYER. This bypasses supernotelib's
+    converter which doesn't support these custom formats.
 
     Args:
         notebook: Loaded notebook object
         page_number: Page index (0-based)
 
     Returns:
-        PageData with image bytes and dimensions
+        PageData if BGLAYER contains a valid PNG, None otherwise
     """
-    converter = sn.converter.ImageConverter(notebook)
-    img = converter.convert(page_number)
+    try:
+        page = notebook.get_page(page_number)
+        style = page.get_style() if hasattr(page, 'get_style') else None
 
-    # Convert to PNG bytes
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    png_bytes = buf.getvalue()
+        # Only try this for custom user styles (PDF imports, etc.)
+        if not style or not style.startswith('user_'):
+            return None
 
-    return PageData(
-        page_number=page_number,
-        png_bytes=png_bytes,
-        image=img,
-        width=img.size[0],
-        height=img.size[1]
-    )
+        # Look for PNG in BGLAYER
+        for layer in page.get_layers():
+            if layer.get_name() == 'BGLAYER':
+                content = layer.get_content()
+                if content and len(content) > 8 and content[:4] == b'\x89PNG':
+                    # It's a PNG! Load it directly
+                    img = Image.open(io.BytesIO(content))
+
+                    # Convert to RGB if needed (OCR expects RGB)
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+
+                    # Convert to PNG bytes
+                    buf = io.BytesIO()
+                    img.save(buf, format='PNG')
+                    png_bytes = buf.getvalue()
+
+                    logger.debug(f"Extracted PNG from BGLAYER for page {page_number} "
+                                f"(custom style: {style}, {img.size[0]}x{img.size[1]})")
+
+                    return PageData(
+                        page_number=page_number,
+                        png_bytes=png_bytes,
+                        image=img,
+                        width=img.size[0],
+                        height=img.size[1]
+                    )
+        return None
+    except Exception as e:
+        logger.debug(f"BGLAYER extraction failed for page {page_number}: {e}")
+        return None
+
+
+def extract_page(notebook: sn.Notebook, page_number: int, ocr_pdf_layers: bool = True) -> PageData:
+    """
+    Extract a single page as PNG image.
+
+    Args:
+        notebook: Loaded notebook object
+        page_number: Page index (0-based)
+        ocr_pdf_layers: If True, attempt to extract embedded PNGs from custom
+                        backgrounds (PDF imports) when normal extraction fails
+
+    Returns:
+        PageData with image bytes and dimensions
+
+    Raises:
+        Exception if page cannot be extracted
+    """
+    try:
+        # Try standard converter first
+        converter = sn.converter.ImageConverter(notebook)
+        img = converter.convert(page_number)
+
+        # Convert to PNG bytes
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        png_bytes = buf.getvalue()
+
+        return PageData(
+            page_number=page_number,
+            png_bytes=png_bytes,
+            image=img,
+            width=img.size[0],
+            height=img.size[1]
+        )
+    except Exception as e:
+        # If standard extraction fails and PDF layer OCR is enabled,
+        # try extracting from BGLAYER directly
+        if ocr_pdf_layers:
+            bglayer_result = _extract_bglayer_png(notebook, page_number)
+            if bglayer_result:
+                logger.info(f"  Page {page_number}: extracted from BGLAYER (PDF/custom layer)")
+                return bglayer_result
+
+        # Re-raise original error if fallback didn't work
+        raise
 
 
 def extract_all_pages(notebook: sn.Notebook) -> List[PageData]:
@@ -386,7 +529,8 @@ def reconstruct_with_recognition(notebook: sn.Notebook, recogn_type: str = "1") 
     # Use our modified packer
     pack_pages_with_recognition(builder, notebook)
 
-    manip._pack_footer(builder)
+    # Use our custom footer packer that preserves DIRTY flag
+    pack_footer_preserving_extras(builder, notebook)
     manip._pack_tail(builder)
     manip._pack_footer_address(builder)
 
