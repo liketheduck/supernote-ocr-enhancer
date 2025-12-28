@@ -253,13 +253,13 @@ curl http://localhost:8100/health
 ### PDF Layer OCR
 
 When `OCR_PDF_LAYERS=true` (default), the enhancer can OCR pages with custom background layers such as:
-- PDF imports
+- PDF documents imported directly on the Supernote device
 - Documents created by external programs with embedded PNG backgrounds
 - Any page using a `user_*` style with PNG data in the BGLAYER
 
-**How it works:** If supernotelib's standard converter fails (e.g., `UnknownDecodeProtocol`), the enhancer checks if the BGLAYER contains a raw PNG image. If so, it extracts that PNG directly and sends it to the OCR API.
+**Platform limitation:** When Supernote imports a PDF, it renders pages as images in the background layer but does not extract or OCR the text. This means imported PDFs are not searchable on the device—a significant limitation for reference documents, manuals, recipes, etc.
 
-This enables search on PDF documents imported to Supernote or created by third-party tools.
+**How this fixes it:** If supernotelib's standard converter fails (e.g., `UnknownDecodeProtocol`), the enhancer checks if the BGLAYER contains a raw PNG image. If so, it extracts that PNG directly, sends it to the OCR API, and injects the recognized text back into the file. The PDF is now fully searchable on your Supernote device.
 
 ### FILE_RECOGN_TYPE: What It Actually Controls
 
