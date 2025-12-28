@@ -4,8 +4,12 @@ SHELL=/bin/bash
 
 # OCR processing - runs every hour
 # - Skips files modified <60s ago (prevents processing mid-sync)
-# - Skips files uploaded in last 60 min (prevents sync conflicts)
+# - Skips files uploaded in last 8 hours (prevents sync conflicts)
 # - Skips already-processed files (fast hash comparison)
 0 * * * * /app/scripts/cron-ocr-job.sh
+
+# Full OCR run at 3am - processes ALL files regardless of upload time
+# Low conflict risk since user is likely asleep
+0 3 * * * SKIP_RECENT_CHECK=true /app/scripts/cron-ocr-job.sh
 
 # Ensure newline at end

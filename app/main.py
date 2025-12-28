@@ -50,6 +50,8 @@ MACAPP_DATABASE_PATH = os.getenv("MACAPP_DATABASE_PATH", "")
 MACAPP_NOTES_PATH = os.getenv("MACAPP_NOTES_PATH", "")
 # FILE_RECOGN_TYPE: "0" = no device OCR, "1" = device OCR enabled, "keep" = preserve existing
 FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "0")
+# Skip the recently-uploaded check (for 3am full processing run)
+SKIP_RECENT_CHECK = os.getenv("SKIP_RECENT_CHECK", "false").lower() == "true"
 SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
 SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
 DATA_PATH = Path("/app/data")
@@ -319,15 +321,19 @@ def run_processing():
         return []
 
     # Filter out recently uploaded files to prevent sync conflicts
-    # Files uploaded by the device in the last 16 hours are "actively edited"
+    # Files uploaded by the device in the last 8 hours are "actively edited"
     # and should not be OCR'd until the user is done editing
-    recently_uploaded = sync_handler.get_recently_uploaded_files(minutes=960)
-    if recently_uploaded:
-        original_count = len(note_files)
-        note_files = [f for f in note_files if f.name not in recently_uploaded]
-        skipped = original_count - len(note_files)
-        if skipped > 0:
-            logger.info(f"Skipping {skipped} recently uploaded files to prevent sync conflicts")
+    # Exception: SKIP_RECENT_CHECK=true bypasses this (used for 3am full run)
+    if SKIP_RECENT_CHECK:
+        logger.info("SKIP_RECENT_CHECK=true - processing all files regardless of upload time")
+    else:
+        recently_uploaded = sync_handler.get_recently_uploaded_files(minutes=480)
+        if recently_uploaded:
+            original_count = len(note_files)
+            note_files = [f for f in note_files if f.name not in recently_uploaded]
+            skipped = original_count - len(note_files)
+            if skipped > 0:
+                logger.info(f"Skipping {skipped} recently uploaded files to prevent sync conflicts")
 
     # Start processing run
     run_id = db.start_processing_run()
