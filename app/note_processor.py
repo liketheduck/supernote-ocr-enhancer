@@ -308,13 +308,15 @@ def convert_ocr_to_supernote_format(
     The Supernote format supports multiple Text elements for line breaks:
     {
         "elements": [
-            {"type": "Raw Content"},
             {"type": "Text", "label": "line 1 text", "words": [...]},
             {"type": "Text", "label": "line 2 text", "words": [...]},
             ...
         ],
-        "type": "Text"
+        "type": "Raw Content"
     }
+
+    NOTE: The root "type" MUST be "Raw Content" (not "Text") to match
+    the device's native OCR format. This is required for search to work.
 
     CRITICAL: Supernote uses a scaled coordinate system!
     - Vision Framework returns bboxes in PNG pixels (e.g., x=420, y=711)
@@ -328,7 +330,7 @@ def convert_ocr_to_supernote_format(
     # Group words into lines based on Y-coordinate
     lines = _group_words_into_lines(ocr_result.text_blocks)
 
-    elements = [{"type": "Raw Content"}]
+    elements = []
     line_texts = []
 
     for line_blocks in lines:
@@ -379,7 +381,7 @@ def convert_ocr_to_supernote_format(
 
     recogn_data = {
         "elements": elements,
-        "type": "Text"
+        "type": "Raw Content"
     }
 
     # Encode as base64
@@ -458,6 +460,7 @@ def pack_pages_with_recognition(builder, notebook, offset=0):
         if recogn_text_addr > 0:
             page_metadata['RECOGNTEXT'] = recogn_text_addr
             page_metadata['RECOGNSTATUS'] = 1  # Mark as DONE
+            page_metadata['RECOGNLANGUAGE'] = 'en_US'  # CRITICAL: Required for search!
 
         if recogn_file_addr > 0:
             page_metadata['RECOGNFILE'] = recogn_file_addr
