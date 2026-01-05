@@ -96,6 +96,26 @@ else
     log "No venv found, using system Python"
 fi
 
+# Wake up external drive if SUPERNOTE_DATA_PATH is on an external volume
+# macOS puts external drives to sleep (disksleep setting) and os.scandir()
+# can fail with EINTR if the disk is waking up during the call
+if [[ -n "$SUPERNOTE_DATA_PATH" && "$SUPERNOTE_DATA_PATH" == /Volumes/* ]]; then
+    VOLUME_PATH=$(echo "$SUPERNOTE_DATA_PATH" | cut -d'/' -f1-3)
+    if [[ -d "$VOLUME_PATH" ]]; then
+        log "Waking up external volume: $VOLUME_PATH"
+        # Touch the volume to wake it from sleep
+        ls "$VOLUME_PATH" > /dev/null 2>&1
+        # Give the disk time to fully spin up (especially for HDDs)
+        sleep 3
+        # Verify the data path is accessible
+        if ! ls "$SUPERNOTE_DATA_PATH" > /dev/null 2>&1; then
+            log "ERROR: Cannot access $SUPERNOTE_DATA_PATH after wake attempt"
+            exit 1
+        fi
+        log "External volume is ready"
+    fi
+fi
+
 # Verify OCR API is accessible
 if ! curl -s --connect-timeout 5 "$OCR_API_URL/health" > /dev/null 2>&1; then
     log "WARNING: OCR API at $OCR_API_URL is not responding"
