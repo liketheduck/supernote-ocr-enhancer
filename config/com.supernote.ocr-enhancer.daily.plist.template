@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Supernote OCR Enhancer - Daily Full Run
+
+  Runs at 3:30 AM every day to process ALL files regardless of upload time.
+  This catches any files that were skipped by the hourly job due to the
+  8-hour recently-uploaded filter.
+
+  Runs at :30 to avoid overlap with the hourly job at :00.
+
+  Install with: ./scripts/install-ocr-enhancer-launchd.sh
+  Remove with:  ./scripts/install-ocr-enhancer-launchd.sh --remove
+
+  View logs: tail -f __DATA_PATH__/cron-ocr.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.supernote.ocr-enhancer.daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO_DIR__/scripts/run-ocr-native.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_DIR__</string>
+
+    <!-- Run at 3:30 AM every day -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <!-- Log stdout/stderr for debugging -->
+    <key>StandardOutPath</key>
+    <string>__DATA_PATH__/launchd-daily.log</string>
+    <key>StandardErrorPath</key>
+    <string>__DATA_PATH__/launchd-daily-error.log</string>
+
+    <!-- Environment variables for the job -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+        <!-- Skip the recently-uploaded check for full processing -->
+        <key>SKIP_RECENT_CHECK</key>
+        <string>true</string>
+    </dict>
+
+    <!-- Don't restart on failure (it's a scheduled job, not a service) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Limit resource usage -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <!-- Nice level (lower priority than interactive apps) -->
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>

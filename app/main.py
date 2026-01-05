@@ -38,7 +38,8 @@ from note_processor import (
 from sync_handlers import create_sync_handler
 
 # Configuration from environment
-OCR_API_URL = os.getenv("OCR_API_URL", "http://host.docker.internal:8100")
+# Use localhost as default for native macOS execution; Docker users override via env
+OCR_API_URL = os.getenv("OCR_API_URL", "http://localhost:8100")
 SUPERNOTE_DATA_PATH = os.getenv("SUPERNOTE_DATA_PATH", "/supernote/data")
 PROCESS_INTERVAL = int(os.getenv("PROCESS_INTERVAL", "0"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -50,14 +51,29 @@ STORAGE_MODE = os.getenv("STORAGE_MODE", "")
 MACAPP_DATABASE_PATH = os.getenv("MACAPP_DATABASE_PATH", "")
 MACAPP_NOTES_PATH = os.getenv("MACAPP_NOTES_PATH", "")
 # FILE_RECOGN_TYPE: "0" = no device OCR, "1" = device OCR enabled, "keep" = preserve existing
-FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "0")
+FILE_RECOGN_TYPE = os.getenv("FILE_RECOGN_TYPE", "keep")
 # OCR_PDF_LAYERS: Extract and OCR embedded PNGs from PDF/custom background layers
 OCR_PDF_LAYERS = os.getenv("OCR_PDF_LAYERS", "true").lower() == "true"
 # Skip the recently-uploaded check (for 3am full processing run)
 SKIP_RECENT_CHECK = os.getenv("SKIP_RECENT_CHECK", "false").lower() == "true"
 SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
 SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
-DATA_PATH = Path("/app/data")
+
+# Data path: supports both Docker (/app/data) and native execution
+# For native: set DATA_PATH env var or it defaults to ./data relative to repo
+def _resolve_data_path() -> Path:
+    """Resolve data path for both Docker and native execution."""
+    env_path = os.getenv("DATA_PATH")
+    if env_path:
+        return Path(env_path).expanduser()
+    # Check if running in Docker (default path exists)
+    docker_path = Path("/app/data")
+    if docker_path.exists():
+        return docker_path
+    # Native execution: use ./data relative to this file's parent (repo root)
+    return Path(__file__).parent.parent / "data"
+
+DATA_PATH = _resolve_data_path()
 BACKUP_PATH = DATA_PATH / "backups"
 DB_PATH = DATA_PATH / "processing.db"
 
@@ -509,7 +525,7 @@ def main():
         # Single run mode
         logger.info("Running in single-run mode")
         run_processing()
-        logger.info("Single run complete. Container will exit.")
+        logger.info("Single run complete. Exiting.")
     else:
         # Continuous mode
         logger.info(f"Running in continuous mode (interval: {PROCESS_INTERVAL}s)")

@@ -43,6 +43,12 @@ data/*.txt
 .env.local
 config/*.env
 !config/settings.env.example
+!config/.env.launchd.example
+
+# Generated launchd plist files (contain absolute paths)
+# Templates are tracked, but generated files are not
+config/*.plist
+!config/*.plist.template
 
 # Local documentation (contains personal paths)
 README.local.md
@@ -63,6 +69,7 @@ scripts/test_*.py
 
 # Development/personal instruction files (contain paths)
 supernote-ocr-enhancer-instructions.md
+CLAUDE.md
 
 # Debug/development scripts with hard-coded paths
 debug_ocr.py

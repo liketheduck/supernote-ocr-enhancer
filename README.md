@@ -1,6 +1,8 @@
 # Supernote OCR Enhancer
 
-Docker container that processes Supernote `.note` files using Apple Vision Framework OCR to replace Supernote's built-in OCR (~27% word error rate) with high-quality Vision Framework OCR (~5% word error rate) and pixel-perfect bounding boxes for search highlighting.
+Processes Supernote `.note` files using Apple Vision Framework OCR to replace Supernote's built-in OCR (~27% word error rate) with high-quality Vision Framework OCR (~5% word error rate) and pixel-perfect bounding boxes for search highlighting.
+
+**Runs natively on macOS** using launchd for scheduling (Docker also available as alternative).
 
 ## Architecture
 
@@ -8,13 +10,18 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Your Mac (Apple Silicon)                    │
 │                                                                      │
+│  launchd (native macOS scheduler)                                   │
+│  ├── com.supernote.ocr-api          (always-on OCR service)        │
+│  ├── com.supernote.ocr-enhancer.hourly   (runs at :00 each hour)   │
+│  └── com.supernote.ocr-enhancer.daily    (runs at 3:30am)          │
+│                                                                      │
 │  ┌────────────────────────┐      ┌───────────────────────────────┐  │
-│  │  supernote-ocr-        │      │  ocr-api (native macOS)       │  │
-│  │  enhancer (Docker)     │─────▶│  Apple Vision Framework      │  │
+│  │  OCR Enhancer          │      │  OCR API                      │  │
+│  │  (Python + launchd)    │─────▶│  Apple Vision Framework       │  │
 │  │                        │      │  localhost:8100               │  │
 │  │  - Extracts pages      │      │                               │  │
-│  │  - Tracks state (SQLite)│     │  - Native macOS OCR          │  │
-│  │  - Injects OCR back    │      │  - Word-level bboxes         │  │
+│  │  - Tracks state (SQLite)│     │  - Native macOS OCR           │  │
+│  │  - Injects OCR back    │      │  - Word-level bboxes          │  │
 │  └──────────┬─────────────┘      └───────────────────────────────┘  │
 │             │                                                        │
 │             ▼                                                        │
@@ -29,7 +36,7 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 
 - **High-quality OCR**: Replaces Supernote's built-in OCR with Apple Vision Framework (+41.8% more text captured)
 - **Fast processing**: 0.8 seconds per page average (150x faster than Qwen2.5-VL)
-- **Accurate bounding boxes**: Word-level bounding boxes enable search highlighting on device
+- **Word-level bounding boxes**: Each word gets its own precise bounding box using Vision's `boundingBoxForRange` API, matching the device's native OCR format for perfect search highlighting
 - **Line break preservation**: Detects line structure from Y-coordinates, maintains paragraph formatting
 - **Smart tracking**: SQLite database tracks file hashes to avoid reprocessing unchanged files
 - **Backup protection**: Creates timestamped backups before modifying any file
@@ -50,62 +57,110 @@ Docker container that processes Supernote `.note` files using Apple Vision Frame
 
 1. **Apple Silicon Mac** (M1/M2/M3/M4) - Required for Apple Vision Framework
 2. **macOS 13+ (Ventura or later)** - Required for Vision Framework OCR
-3. **Docker Desktop** installed
-4. **OCR API server** running locally (see [OCR API Setup](#ocr-api-setup))
-5. **Supernote .note files** synced to your Mac
+3. **Python 3.11+** (comes with macOS or install via Homebrew)
+4. **Supernote .note files** synced to your Mac
 
-## Quick Start
+> **Note**: Docker Desktop is optional. Native launchd is recommended (simpler, lower overhead).
 
-### 1. Clone and Configure
+## Quick Start (Native launchd)
+
+### 1. Clone and Set Up OCR API
 
 ```bash
 git clone https://github.com/liketheduck/supernote-ocr-enhancer.git
 cd supernote-ocr-enhancer
 
-# Create local configuration
-cp .env.example .env.local
-
-# Edit .env.local with your paths
-nano .env.local
+# Set up OCR API (see OCR API Setup section for details)
+mkdir -p ~/services/ocr-api
+cp examples/server.py ~/services/ocr-api/
+./scripts/install-launchd.sh  # Installs OCR API as always-on service
 ```
 
-Required settings in `.env.local`:
+### 2. Install the OCR Enhancer
+
+```bash
+./scripts/install-ocr-enhancer-launchd.sh
+```
+
+This will:
+- Create a Python virtual environment
+- Install dependencies
+- Create configuration at `~/.supernote-ocr/.env`
+- Install hourly and daily scheduled jobs
+
+### 3. Configure Your Settings
+
+Edit `~/.supernote-ocr/.env`:
 ```bash
 # REQUIRED: Path to your Supernote .note files
 SUPERNOTE_DATA_PATH=/path/to/your/supernote/data
 ```
 
-**Optional** - Only if using a self-hosted Supernote Cloud sync server:
+**Optional** - If using a self-hosted Supernote Cloud sync server:
 ```bash
-# Enable Personal Cloud mode and provide MySQL password
 STORAGE_MODE=personal_cloud
 MYSQL_PASSWORD=your_mysql_password  # Get with: docker exec supernote-mariadb env | grep MYSQL_PASSWORD
 ```
 
-> **Note**: If you don't use a sync server (manual file transfer or Mac app), leave these settings out.
+### 4. Test It
 
-### 2. Build the Container
+```bash
+# Run once immediately
+./scripts/install-ocr-enhancer-launchd.sh --run
+
+# Check status
+./scripts/install-ocr-enhancer-launchd.sh --check
+
+# View logs
+tail -f data/cron-ocr.log
+```
+
+### Scheduled Jobs
+
+Once installed, OCR runs automatically:
+- **Hourly** at :00 - Processes new/changed files (skips recently uploaded)
+- **Daily** at 3:30 AM - Full run, processes ALL files
+
+### Managing the Installation
+
+```bash
+# Check status
+./scripts/install-ocr-enhancer-launchd.sh --check
+
+# Run now
+./scripts/install-ocr-enhancer-launchd.sh --run
+
+# Uninstall
+./scripts/install-ocr-enhancer-launchd.sh --remove
+```
+
+---
+
+## Quick Start (Docker Alternative)
+
+If you prefer Docker, it's still fully supported:
+
+### 1. Configure
+
+```bash
+cp .env.example .env.local
+nano .env.local  # Set SUPERNOTE_DATA_PATH
+```
+
+### 2. Build and Run
 
 ```bash
 docker compose build
-```
-
-### 3. Start the OCR API
-
-You need the OCR API server running locally. See [OCR API Setup](#ocr-api-setup) below.
-
-### 4. Run OCR Enhancement
-
-```bash
 docker compose run --rm ocr-enhancer python /app/main.py
 ```
 
-This works with or without a sync server running. The OCR enhancer:
-- Skips files that haven't changed (fast no-op when nothing to process)
-- Updates the sync database atomically while the server runs
-- Bumps file timestamps by 1 second so your OCR'd files win the next sync
+### 3. For Scheduled Runs
 
-> **Note**: The sync server does NOT need to be stopped. MariaDB handles concurrent access safely, and the sync protocol is stateless. See [Architecture: Why No Server Restart?](#architecture-why-no-server-restart) for details.
+```bash
+docker compose up -d  # Starts container with cron daemon
+```
+
+> **Note**: The sync server does NOT need to be stopped. MariaDB handles concurrent access safely. See [Architecture: Why No Server Restart?](#architecture-why-no-server-restart) for details.
 
 ## OCR API Setup
 
@@ -165,7 +220,7 @@ The `/prompts` endpoint will show `"vision_available": true` if `ocrmac` is prop
 
 | Endpoint | OCR Engine | Speed | Accuracy | Use Case |
 |----------|------------|-------|----------|----------|
-| `/ocr/vision` | Apple Vision Framework | **0.8s/page** | Good (+41.8% vs Supernote) | **Default - batch processing** |
+| `/ocr/vision` | Apple Vision Framework | **0.8s/page** | Good (+41.8% vs Supernote) | **Default - batch processing, word-level bboxes** |
 | `/ocr` | Qwen2.5-VL 7B (requires mlx-vlm) | 60-120s/page | Best (+107% vs Supernote) | Single files needing max accuracy |
 
 This project uses `/ocr/vision` by default for its speed advantage.
@@ -231,13 +286,13 @@ curl http://localhost:8100/health
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SUPERNOTE_DATA_PATH` | (required) | Path to .note files on host |
-| `OCR_API_URL` | `http://host.docker.internal:8100` | OCR API endpoint |
+| `OCR_API_URL` | `http://localhost:8100` | OCR API endpoint (Docker uses host.docker.internal) |
 | `PROCESS_INTERVAL` | `0` | Seconds between runs (0 = single run) |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `WRITE_TO_NOTE` | `true` | Write OCR data back to files |
 | `CREATE_BACKUPS` | `true` | Create backups before modifying |
 | `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
-| `FILE_RECOGN_TYPE` | `0` | `0`=no device OCR, `1`=device OCR on, `keep`=preserve existing setting (OCR still injected) |
+| `FILE_RECOGN_TYPE` | `keep` | `keep`=preserve existing setting, `0`=no device OCR, `1`=device OCR on (OCR always injected) |
 | `OCR_PDF_LAYERS` | `true` | Extract and OCR embedded images from PDF/custom background layers |
 
 ## How It Works
@@ -343,6 +398,36 @@ Previous versions stopped the sync server during OCR processing. This is no long
 - Ensures sync completes before OCR runs
 
 This architecture allows hourly OCR runs without service interruption or database corruption risk.
+
+### Word-Level Bounding Boxes
+
+**The Problem**: Supernote's device OCR returns individual words with separate bounding boxes. Our original implementation returned entire lines as single "words", which prevented proper search highlighting.
+
+**The Solution**: We use Vision Framework's `boundingBoxForRange` API to extract precise bounding boxes for each word within a recognized line. This matches the device's native OCR format exactly.
+
+**How it works**:
+1. Vision recognizes text line-by-line (e.g., "Hello World")
+2. We split each line into words using regex (`\S+`)
+3. For each word, we call `boundingBoxForRange` to get its exact pixel coordinates
+4. Coordinates are converted from Vision's bottom-left origin to Supernote's top-left origin
+
+**Fallback mechanism**: If `boundingBoxForRange` fails for any word (returns None or throws an exception), we fall back to proportional estimation - distributing words across the line based on character count. This is less precise but ensures OCR data is always generated.
+
+**Performance**: Word-level extraction adds ~10-15ms per page (negligible).
+
+**Output format** (matches device OCR):
+```json
+{
+  "elements": [{
+    "label": "Hello World",
+    "words": [
+      {"label": "Hello", "bounding-box": {"x": 10.5, "y": 5.2, "width": 15.3, "height": 8.1}},
+      {"label": " "},
+      {"label": "World", "bounding-box": {"x": 27.1, "y": 5.2, "width": 18.7, "height": 8.1}}
+    ]
+  }]
+}
+```
 
 ### Critical: Supernote Coordinate System Discovery
 
@@ -692,8 +777,8 @@ We could force server to always win (set timestamp to year 2099), but that would
 supernote-ocr-enhancer/
 ├── .env.example              # Template for local configuration
 ├── .env.local                # Your local config (git-ignored)
-├── Dockerfile                # Container definition
-├── docker-compose.yml        # Service configuration
+├── Dockerfile                # Container definition (Docker alternative)
+├── docker-compose.yml        # Service configuration (Docker alternative)
 ├── run-with-sync-control.sh  # Personal Cloud sync coordination
 ├── run-with-macapp.sh        # Mac app mode (auto-detects paths)
 ├── app/
@@ -703,15 +788,20 @@ supernote-ocr-enhancer/
 │   ├── note_processor.py     # .note file handling
 │   └── sync_handlers.py      # Sync database handlers (Mac app & Personal Cloud)
 ├── config/
-│   ├── crontab               # Cron schedule for Docker container
-│   └── com.supernote.ocr-api.plist.template  # LaunchAgent template
+│   ├── crontab               # Cron schedule (Docker only)
+│   ├── .env.launchd.example  # Template for native launchd config
+│   ├── com.supernote.ocr-api.plist.template         # OCR API LaunchAgent
+│   ├── com.supernote.ocr-enhancer.hourly.plist.template  # Hourly job
+│   └── com.supernote.ocr-enhancer.daily.plist.template   # Daily job
 ├── examples/
 │   └── server.py             # OCR API server (copy to ~/services/ocr-api/)
 ├── scripts/
-│   ├── cron-ocr-job.sh           # Cron job script (runs inside Docker)
-│   ├── cron-macapp-template.sh   # Template for Mac app scheduled OCR (runs on host)
-│   ├── install-launchd.sh        # Install OCR API as LaunchAgent (always-on)
+│   ├── install-ocr-enhancer-launchd.sh  # Install enhancer as launchd jobs
+│   ├── run-ocr-native.sh         # Native runner script for launchd
+│   ├── install-launchd.sh        # Install OCR API as LaunchAgent
 │   ├── start-ocr-api.sh          # Start OCR API manually (foreground)
+│   ├── cron-ocr-job.sh           # Cron job script (Docker only)
+│   ├── cron-macapp-template.sh   # Template for Mac app scheduled OCR
 │   ├── compare_ocr.py            # OCR comparison tool
 │   └── extract_ocr_text.py       # OCR backup/export
 └── data/

@@ -21,8 +21,10 @@ services:
     environment:
       # Container timezone (matches host for cron scheduling)
       - TZ=America/New_York
-      # OCR API endpoint (host machine)
+      # OCR API endpoint (host machine) - must use host.docker.internal from container
       - OCR_API_URL=http://host.docker.internal:8100
+      # Data path inside container
+      - DATA_PATH=/app/data
       # Processing settings
       - SUPERNOTE_DATA_PATH=/supernote/data
       - PROCESS_INTERVAL=${PROCESS_INTERVAL:-0}  # 0 = single run, >0 = interval in seconds

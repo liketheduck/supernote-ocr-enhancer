@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Supernote OCR Enhancer - Hourly Scheduled Job
+
+  Runs at :00 every hour to process new/modified .note files.
+  Skips files uploaded in the last 8 hours to prevent sync conflicts.
+
+  Install with: ./scripts/install-ocr-enhancer-launchd.sh
+  Remove with:  ./scripts/install-ocr-enhancer-launchd.sh --remove
+
+  View logs: tail -f __DATA_PATH__/cron-ocr.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.supernote.ocr-enhancer.hourly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO_DIR__/scripts/run-ocr-native.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_DIR__</string>
+
+    <!-- Run at :00 every hour -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Log stdout/stderr for debugging -->
+    <key>StandardOutPath</key>
+    <string>__DATA_PATH__/launchd-hourly.log</string>
+    <key>StandardErrorPath</key>
+    <string>__DATA_PATH__/launchd-hourly-error.log</string>
+
+    <!-- Environment variables for the job -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+
+    <!-- Don't restart on failure (it's a scheduled job, not a service) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Limit resource usage -->
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <!-- Nice level (lower priority than interactive apps) -->
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>
