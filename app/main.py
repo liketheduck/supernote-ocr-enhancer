@@ -33,7 +33,8 @@ from note_processor import (
     extract_page,
     inject_ocr_results,
     get_existing_ocr_text,
-    has_ocr_data
+    has_ocr_data,
+    export_ocr_text_to_file
 )
 from sync_handlers import create_sync_handler
 
@@ -58,6 +59,9 @@ OCR_PDF_LAYERS = os.getenv("OCR_PDF_LAYERS", "true").lower() == "true"
 SKIP_RECENT_CHECK = os.getenv("SKIP_RECENT_CHECK", "false").lower() == "true"
 SYNC_SERVER_COMPOSE = os.getenv("SYNC_SERVER_COMPOSE", "")
 SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
+# Text export settings: save OCR text to local .txt files
+OCR_TXT_EXPORT_ENABLED = os.getenv("OCR_TXT_EXPORT_ENABLED", "false").lower() == "true"
+OCR_TXT_EXPORT_PATH = os.getenv("OCR_TXT_EXPORT_PATH", "")
 
 # Data path: supports both Docker (/app/data) and native execution
 # For native: set DATA_PATH env var or it defaults to ./data relative to repo
@@ -319,6 +323,26 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                 logger.error(f"  Failed to inject OCR data: {e}")
                 processing_state["errors"].append(f"{note_path.name} injection: {str(e)}")
 
+        # Export OCR text to local .txt file if enabled
+        if OCR_TXT_EXPORT_ENABLED and OCR_TXT_EXPORT_PATH and page_results:
+            try:
+                # Collect full text from each page's OCR result
+                page_texts = {
+                    page_num: ocr_result.full_text
+                    for page_num, (ocr_result, _, _) in page_results.items()
+                }
+                export_path = export_ocr_text_to_file(
+                    note_path,
+                    page_texts,
+                    Path(SUPERNOTE_DATA_PATH),
+                    Path(OCR_TXT_EXPORT_PATH).expanduser()
+                )
+                if export_path:
+                    logger.info(f"  Exported OCR text to {export_path}")
+            except Exception as e:
+                logger.error(f"  Failed to export OCR text: {e}")
+                processing_state["errors"].append(f"{note_path.name} text export: {str(e)}")
+
         # Update status based on results
         total_time = (time.time() - start_time) * 1000
 
@@ -470,6 +494,9 @@ def main():
     logger.info(f"Reset database: {RESET_DATABASE}")
     logger.info(f"FILE_RECOGN_TYPE: {FILE_RECOGN_TYPE}")
     logger.info(f"OCR PDF layers: {OCR_PDF_LAYERS}")
+    logger.info(f"Text export enabled: {OCR_TXT_EXPORT_ENABLED}")
+    if OCR_TXT_EXPORT_ENABLED:
+        logger.info(f"Text export path: {OCR_TXT_EXPORT_PATH or '(not set - export disabled)'}")
 
     # Ensure directories exist
     DATA_PATH.mkdir(parents=True, exist_ok=True)

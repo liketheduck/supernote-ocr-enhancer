@@ -670,3 +670,79 @@ def get_existing_ocr_text(notebook: sn.Notebook, page_number: int) -> Optional[s
         return None
     except Exception:
         return None
+
+
+def export_ocr_text_to_file(
+    note_path: Path,
+    page_texts: Dict[int, str],
+    supernote_data_path: Path,
+    export_base_path: Path
+) -> Optional[Path]:
+    """
+    Export OCR text to a .txt file, preserving folder structure.
+
+    The text file will be created at the same relative path as the .note file,
+    but under export_base_path instead of supernote_data_path, with a .txt extension.
+
+    Example:
+        note_path: /data/user/Supernote/Note/Work/Meeting.note
+        supernote_data_path: /data
+        export_base_path: /export
+        Result: /export/user/Supernote/Note/Work/Meeting.txt
+
+    Args:
+        note_path: Path to the original .note file
+        page_texts: Dict mapping page_number -> OCR text for that page
+        supernote_data_path: Base path where .note files are stored
+        export_base_path: Base path where .txt files should be saved
+
+    Returns:
+        Path to the created .txt file, or None if export failed
+    """
+    try:
+        # Compute relative path from supernote_data_path
+        try:
+            relative_path = note_path.relative_to(supernote_data_path)
+        except ValueError:
+            # note_path is not under supernote_data_path, use just the filename
+            logger.warning(f"Note path {note_path} not under {supernote_data_path}, using filename only")
+            relative_path = Path(note_path.name)
+
+        # Create the .txt path by replacing the extension
+        txt_relative_path = relative_path.with_suffix('.txt')
+        txt_full_path = export_base_path / txt_relative_path
+
+        # Create parent directories if they don't exist
+        txt_full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Combine all page texts with page separators
+        if not page_texts:
+            logger.debug(f"No OCR text to export for {note_path.name}")
+            return None
+
+        # Sort pages by page number and combine
+        sorted_pages = sorted(page_texts.items())
+        full_text_parts = []
+
+        for page_num, text in sorted_pages:
+            if text and text.strip():
+                if len(sorted_pages) > 1:
+                    full_text_parts.append(f"--- Page {page_num + 1} ---")
+                full_text_parts.append(text.strip())
+
+        if not full_text_parts:
+            logger.debug(f"No non-empty OCR text to export for {note_path.name}")
+            return None
+
+        full_text = "\n\n".join(full_text_parts)
+
+        # Write the text file
+        with open(txt_full_path, 'w', encoding='utf-8') as f:
+            f.write(full_text)
+
+        logger.info(f"Exported OCR text to {txt_full_path}")
+        return txt_full_path
+
+    except Exception as e:
+        logger.error(f"Failed to export OCR text for {note_path}: {e}")
+        return None

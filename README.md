@@ -294,6 +294,8 @@ curl http://localhost:8100/health
 | `RESET_DATABASE` | `false` | Clear all history and reprocess every file |
 | `FILE_RECOGN_TYPE` | `keep` | `keep`=preserve existing setting, `0`=no device OCR, `1`=device OCR on (OCR always injected) |
 | `OCR_PDF_LAYERS` | `true` | Extract and OCR embedded images from PDF/custom background layers |
+| `OCR_TXT_EXPORT_ENABLED` | `false` | Export OCR text to local .txt files |
+| `OCR_TXT_EXPORT_PATH` | (none) | Directory for exported .txt files (required if export enabled) |
 
 ## How It Works
 
@@ -321,6 +323,41 @@ When `OCR_PDF_LAYERS=true` (default), the enhancer can OCR pages with custom bac
 **Automatic recovery:** If pages lose their OCR data (due to sync conflicts or injection failures), the enhancer automatically detects and re-processes only the affected pages. Pages with empty OCR results (no text found) are recognized as complete and won't be repeatedly re-OCR'd.
 
 **Warning (untested):** If your PDF imported on the Supernote device preserves clickable links, enabling `OCR_PDF_LAYERS` may cause those links to be lost when the file is reconstructed. Set `OCR_PDF_LAYERS=false` if link preservation is critical. Note: this only affects PDFs that have NO existing OCR data—files with OCR are skipped entirely. Feedback welcome.
+
+### Text Export to Local Files
+
+You can optionally save the recognized text to local `.txt` files, preserving your folder structure. This is useful for:
+- Local full-text search across all your notes
+- Backup of recognized text
+- Integration with other tools (grep, Obsidian, etc.)
+- Accessing note content without the Supernote device
+
+**To enable text export**, add these to your `.env.local`:
+
+```bash
+OCR_TXT_EXPORT_ENABLED=true
+OCR_TXT_EXPORT_PATH=~/Documents/SupernoteText
+```
+
+**How it works:**
+- The folder structure of your notes is preserved
+- Files have the same name but with `.txt` extension
+- Multi-page notes include page separators (e.g., `--- Page 1 ---`)
+- Text is exported alongside OCR injection (doesn't affect the normal flow)
+
+**Example:**
+```
+Your notes:
+  /Volumes/Data/Supernote/user/Note/Work/Meeting.note
+  /Volumes/Data/Supernote/user/Note/Personal/Ideas.note
+
+With SUPERNOTE_DATA_PATH=/Volumes/Data/Supernote
+And  OCR_TXT_EXPORT_PATH=~/Documents/SupernoteText
+
+Exported text files:
+  ~/Documents/SupernoteText/user/Note/Work/Meeting.txt
+  ~/Documents/SupernoteText/user/Note/Personal/Ideas.txt
+```
 
 ### FILE_RECOGN_TYPE: What It Actually Controls
 
