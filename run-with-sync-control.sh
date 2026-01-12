@@ -139,8 +139,20 @@ start_sync_server() {
 run_ocr_enhancer() {
     log_info "Running Supernote OCR Enhancer..."
 
+    # Log text export status if enabled
+    if [ "${OCR_TXT_EXPORT_ENABLED:-false}" = "true" ]; then
+        if [ -n "$OCR_TXT_EXPORT_PATH" ]; then
+            log_info "Text export enabled: $OCR_TXT_EXPORT_PATH"
+        else
+            log_warn "Text export enabled but OCR_TXT_EXPORT_PATH not set"
+        fi
+    fi
+
     if $DRY_RUN; then
         log_info "[DRY RUN] Would run: docker compose -f $OCR_COMPOSE run --rm ocr-enhancer python /app/main.py"
+        if [ "${OCR_TXT_EXPORT_ENABLED:-false}" = "true" ]; then
+            log_info "[DRY RUN] Text export: ${OCR_TXT_EXPORT_PATH:-not set}"
+        fi
         return 0
     fi
 

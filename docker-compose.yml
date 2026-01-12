@@ -41,6 +41,10 @@ services:
       # Mac app mode (alternative to Personal Cloud)
       - MACAPP_DATABASE_PATH=${MACAPP_DATABASE_PATH:-}
       - MACAPP_NOTES_PATH=${MACAPP_NOTES_PATH:-}
+      # Text export: save OCR text to .txt files (optional)
+      - OCR_TXT_EXPORT_ENABLED=${OCR_TXT_EXPORT_ENABLED:-false}
+      # Inside container, text exports go to /txt-export (mapped via volume below)
+      - OCR_TXT_EXPORT_PATH=${OCR_TXT_EXPORT_ENABLED:+/txt-export}
     volumes:
       # Supernote data (read-write to inject OCR data)
       # Set SUPERNOTE_DATA_PATH in .env.local
@@ -50,6 +54,9 @@ services:
       # Docker socket for accessing MariaDB container (Personal Cloud sync database updates)
       # This allows the container to update the sync database while the sync server runs
       - /var/run/docker.sock:/var/run/docker.sock
+      # Text export directory (used when OCR_TXT_EXPORT_ENABLED=true)
+      # Host path: set OCR_TXT_EXPORT_PATH in .env.local, defaults to ./data/txt-export
+      - ${OCR_TXT_EXPORT_PATH:-./data/txt-export}:/txt-export
     env_file:
       - .env.local
     extra_hosts:

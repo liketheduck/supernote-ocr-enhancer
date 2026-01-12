@@ -220,21 +220,47 @@ count_note_files() {
 run_ocr_enhancer() {
     log_info "Running Supernote OCR Enhancer (Mac app mode)..."
 
+    # Build docker arguments array
+    local docker_args=(
+        -e STORAGE_MODE=mac_app
+        -e SUPERNOTE_DATA_PATH=/supernote/data
+        -e MACAPP_DATABASE_PATH=/macapp/supernote.db
+        -v "$SUPERNOTE_DATA_PATH:/supernote/data"
+        -v "$MACAPP_DATABASE_PATH:/macapp/supernote.db"
+    )
+
+    # Add text export configuration if enabled
+    if [ "${OCR_TXT_EXPORT_ENABLED:-false}" = "true" ]; then
+        docker_args+=(-e OCR_TXT_EXPORT_ENABLED=true)
+        if [ -n "$OCR_TXT_EXPORT_PATH" ]; then
+            # Expand ~ to full path
+            local export_path_expanded="${OCR_TXT_EXPORT_PATH/#\~/$HOME}"
+            # Ensure directory exists
+            mkdir -p "$export_path_expanded"
+            # Mount and set container path
+            docker_args+=(-e OCR_TXT_EXPORT_PATH=/txt-export)
+            docker_args+=(-v "$export_path_expanded:/txt-export")
+            log_info "Text export: $export_path_expanded -> /txt-export"
+        else
+            log_warn "Text export enabled but OCR_TXT_EXPORT_PATH not set"
+        fi
+    fi
+
     if $DRY_RUN; then
         log_info "[DRY RUN] Would run OCR enhancer with:"
         log_info "  SUPERNOTE_DATA_PATH=$SUPERNOTE_DATA_PATH"
         log_info "  STORAGE_MODE=mac_app"
         log_info "  MACAPP_DATABASE_PATH=$MACAPP_DATABASE_PATH"
+        if [ "${OCR_TXT_EXPORT_ENABLED:-false}" = "true" ]; then
+            log_info "  OCR_TXT_EXPORT_ENABLED=true"
+            log_info "  OCR_TXT_EXPORT_PATH=${OCR_TXT_EXPORT_PATH:-not set}"
+        fi
         return 0
     fi
 
     # Run with Mac app configuration
     docker compose -f "$OCR_COMPOSE" run --rm \
-        -e STORAGE_MODE=mac_app \
-        -e SUPERNOTE_DATA_PATH=/supernote/data \
-        -e MACAPP_DATABASE_PATH=/macapp/supernote.db \
-        -v "$SUPERNOTE_DATA_PATH:/supernote/data" \
-        -v "$MACAPP_DATABASE_PATH:/macapp/supernote.db" \
+        "${docker_args[@]}" \
         ocr-enhancer python /app/main.py
 
     local exit_code=$?

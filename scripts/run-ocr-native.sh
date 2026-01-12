@@ -81,6 +81,14 @@ log "  OCR_API_URL: $OCR_API_URL"
 log "  DATA_PATH: $DATA_PATH"
 log "  STORAGE_MODE: ${STORAGE_MODE:-none}"
 log "  SKIP_RECENT_CHECK: ${SKIP_RECENT_CHECK:-false}"
+if [[ "${OCR_TXT_EXPORT_ENABLED:-false}" == "true" ]]; then
+    log "  OCR_TXT_EXPORT_ENABLED: true"
+    if [[ -n "$OCR_TXT_EXPORT_PATH" ]]; then
+        log "  OCR_TXT_EXPORT_PATH: $OCR_TXT_EXPORT_PATH"
+    else
+        log "  WARNING: Text export enabled but OCR_TXT_EXPORT_PATH not set"
+    fi
+fi
 
 # Activate Python virtual environment if present
 PYTHON_CMD="python3"
