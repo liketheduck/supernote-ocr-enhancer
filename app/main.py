@@ -496,7 +496,10 @@ def main():
     logger.info(f"OCR PDF layers: {OCR_PDF_LAYERS}")
     logger.info(f"Text export enabled: {OCR_TXT_EXPORT_ENABLED}")
     if OCR_TXT_EXPORT_ENABLED:
-        logger.info(f"Text export path: {OCR_TXT_EXPORT_PATH or '(not set - export disabled)'}")
+        if OCR_TXT_EXPORT_PATH:
+            logger.info(f"Text export path: {OCR_TXT_EXPORT_PATH}")
+        else:
+            logger.warning("Text export enabled but OCR_TXT_EXPORT_PATH not set - export disabled")
 
     # Ensure directories exist
     DATA_PATH.mkdir(parents=True, exist_ok=True)
