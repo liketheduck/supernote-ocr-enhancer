@@ -168,7 +168,42 @@ supernote-sync
 - **No surprises**: App opens/closes only when you run the script
 - **Perfect for laptops**: No background processes, runs only when you want
 
-See [SYNC-WRAPPER.md](SYNC-WRAPPER.md) for detailed documentation.
+---
+
+## 🚀 App Monitor Scripts (Auto-OCR on App Close)
+
+### Option 1: Full Monitor (Recommended)
+
+```bash
+./supernote-monitor.sh
+```
+
+**Features:**
+- 🚀 Launches Supernote app automatically
+- ⏳ Monitors when you close the app
+- 🔥 Runs OCR processing immediately on close
+- ⏱️ Waits 3 seconds for file sync to complete
+- 🛡️ Handles Ctrl+C gracefully
+- 📝 Detailed logging and status updates
+
+### Option 2: Quick Launcher
+
+```bash
+./quick-launch.sh
+```
+
+**Features:**
+- 🚀 Simple app launcher
+- ⚡ Minimal overhead
+- 🎯 Auto-OCR when app closes
+- 📄 Clean output
+
+### Why Use These?
+
+- **Perfect workflow**: Use Supernote normally, close app, get OCR automatically
+- **No scheduling**: No cron jobs or background processes
+- **Instant results**: OCR runs immediately when you close the app
+- **File sync safety**: Built-in delay ensures files are fully synced
 
 ---
 
