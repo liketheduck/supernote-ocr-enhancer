@@ -36,6 +36,8 @@ from note_processor import (
     has_ocr_data,
     export_ocr_text_to_file
 )
+from pdf_exporter import export_note_to_pdf
+from logseq_exporter import export_note_to_logseq
 from sync_handlers import create_sync_handler
 
 # Configuration from environment
@@ -62,6 +64,17 @@ SYNC_SERVER_ENV = os.getenv("SYNC_SERVER_ENV", "")
 # Text export settings: save OCR text to local .txt files
 OCR_TXT_EXPORT_ENABLED = os.getenv("OCR_TXT_EXPORT_ENABLED", "false").lower() == "true"
 OCR_TXT_EXPORT_PATH = os.getenv("OCR_TXT_EXPORT_PATH", "")
+# PDF export settings: generate searchable PDFs with embedded OCR
+OCR_PDF_EXPORT_ENABLED = os.getenv("OCR_PDF_EXPORT_ENABLED", "false").lower() == "true"
+OCR_PDF_EXPORT_PATH = os.getenv("OCR_PDF_EXPORT_PATH", "")
+# Logseq export settings: generate Logseq markdown pages with PDF links
+LOGSEQ_EXPORT_ENABLED = os.getenv("LOGSEQ_EXPORT_ENABLED", "false").lower() == "true"
+LOGSEQ_PAGES_PATH = os.getenv("LOGSEQ_PAGES_PATH", "")
+LOGSEQ_ASSETS_PATH = os.getenv("LOGSEQ_ASSETS_PATH", "")
+# AI text processing: cleanup OCR errors with Qwen
+AI_TEXT_CLEANUP_ENABLED = os.getenv("AI_TEXT_CLEANUP_ENABLED", "false").lower() == "true"
+# PDF debug mode: visualize bounding boxes
+PDF_DEBUG_MODE = os.getenv("PDF_DEBUG_MODE", "false").lower() == "true"
 
 # Data path: supports both Docker (/app/data) and native execution
 # For native: set DATA_PATH env var or it defaults to ./data relative to repo
@@ -274,9 +287,9 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                     pages_skipped += 1
                     continue
 
-                # Run OCR with Vision Framework (word-level bounding boxes)
-                logger.info(f"  OCR page {page_num + 1}/{total_pages}...")
-                ocr_result = ocr_client.ocr_image_vision(page_data.png_bytes)
+                # Run OCR with Qwen2.5-VL (slower but more accurate)
+                logger.info(f"  OCR page {page_num + 1}/{total_pages} with Qwen (this will take 60-120s)...")
+                ocr_result = ocr_client.ocr_image(page_data.png_bytes, prompt_type="ocr_with_boxes")
 
                 # Store in database
                 db.store_page_result(
@@ -323,13 +336,40 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                 logger.error(f"  Failed to inject OCR data: {e}")
                 processing_state["errors"].append(f"{note_path.name} injection: {str(e)}")
 
-        # Export OCR text to local .txt file if enabled
-        if OCR_TXT_EXPORT_ENABLED and OCR_TXT_EXPORT_PATH and page_results:
+        # AI text cleanup if enabled (before exporting)
+        cleaned_page_results = page_results
+        if AI_TEXT_CLEANUP_ENABLED and page_results:
             try:
-                # Collect full text from each page's OCR result
+                from text_processor import cleanup_ocr_text_with_ai
+                logger.info(f"  Cleaning up OCR text with AI...")
+                
+                cleaned_page_results = {}
+                for page_num, (ocr_result, width, height) in page_results.items():
+                    cleaned_text = cleanup_ocr_text_with_ai(ocr_result.full_text, ocr_client)
+                    
+                    # Create new OCRResult with cleaned text
+                    cleaned_ocr = OCRResult(
+                        text_blocks=ocr_result.text_blocks,
+                        full_text=cleaned_text,
+                        processing_time_ms=ocr_result.processing_time_ms,
+                        raw_response=ocr_result.raw_response,
+                        ocr_image_width=ocr_result.ocr_image_width,
+                        ocr_image_height=ocr_result.ocr_image_height
+                    )
+                    cleaned_page_results[page_num] = (cleaned_ocr, width, height)
+                
+                logger.info(f"  Text cleanup completed")
+            except Exception as e:
+                logger.warning(f"  AI text cleanup failed, using original text: {e}")
+                cleaned_page_results = page_results
+
+        # Export OCR text to local .txt file if enabled
+        if OCR_TXT_EXPORT_ENABLED and OCR_TXT_EXPORT_PATH and cleaned_page_results:
+            try:
+                # Collect full text from each page's OCR result (using cleaned text)
                 page_texts = {
                     page_num: ocr_result.full_text
-                    for page_num, (ocr_result, _, _) in page_results.items()
+                    for page_num, (ocr_result, _, _) in cleaned_page_results.items()
                 }
                 export_path = export_ocr_text_to_file(
                     note_path,
@@ -342,6 +382,42 @@ def process_note_file(note_path: Path) -> ProcessingResult:
             except Exception as e:
                 logger.error(f"  Failed to export OCR text: {e}")
                 processing_state["errors"].append(f"{note_path.name} text export: {str(e)}")
+
+        # Export searchable PDF with embedded OCR if enabled
+        # Note: PDF uses original page_results (not cleaned) for bounding boxes
+        pdf_path = None
+        if OCR_PDF_EXPORT_ENABLED and OCR_PDF_EXPORT_PATH and page_results:
+            try:
+                pdf_path = export_note_to_pdf(
+                    note_path,
+                    page_results,  # Use original for bounding boxes
+                    Path(SUPERNOTE_DATA_PATH),
+                    Path(OCR_PDF_EXPORT_PATH).expanduser(),
+                    debug_mode=PDF_DEBUG_MODE
+                )
+                if pdf_path:
+                    logger.info(f"  Exported searchable PDF to {pdf_path}")
+            except Exception as e:
+                logger.error(f"  Failed to export PDF: {e}")
+                processing_state["errors"].append(f"{note_path.name} PDF export: {str(e)}")
+
+        # Export to Logseq markdown with PDF link if enabled
+        if LOGSEQ_EXPORT_ENABLED and LOGSEQ_PAGES_PATH and LOGSEQ_ASSETS_PATH and cleaned_page_results:
+            try:
+                logseq_md_path = export_note_to_logseq(
+                    note_path,
+                    cleaned_page_results,  # Use cleaned text for Logseq
+                    Path(SUPERNOTE_DATA_PATH),
+                    Path(LOGSEQ_PAGES_PATH).expanduser(),
+                    Path(LOGSEQ_ASSETS_PATH).expanduser(),
+                    pdf_source_path=pdf_path,  # Pass PDF path if available
+                    ocr_client=ocr_client  # Pass client for AI summary
+                )
+                if logseq_md_path:
+                    logger.info(f"  Exported Logseq page to {logseq_md_path}")
+            except Exception as e:
+                logger.error(f"  Failed to export Logseq page: {e}")
+                processing_state["errors"].append(f"{note_path.name} Logseq export: {str(e)}")
 
         # Update status based on results
         total_time = (time.time() - start_time) * 1000
@@ -500,6 +576,25 @@ def main():
             logger.info(f"Text export path: {OCR_TXT_EXPORT_PATH}")
         else:
             logger.warning("Text export enabled but OCR_TXT_EXPORT_PATH not set - export disabled")
+    logger.info(f"PDF export enabled: {OCR_PDF_EXPORT_ENABLED}")
+    if OCR_PDF_EXPORT_ENABLED:
+        if OCR_PDF_EXPORT_PATH:
+            logger.info(f"PDF export path: {OCR_PDF_EXPORT_PATH}")
+        else:
+            logger.warning("PDF export enabled but OCR_PDF_EXPORT_PATH not set - export disabled")
+    logger.info(f"Logseq export enabled: {LOGSEQ_EXPORT_ENABLED}")
+    if LOGSEQ_EXPORT_ENABLED:
+        if LOGSEQ_PAGES_PATH and LOGSEQ_ASSETS_PATH:
+            logger.info(f"Logseq pages path: {LOGSEQ_PAGES_PATH}")
+            logger.info(f"Logseq assets path: {LOGSEQ_ASSETS_PATH}")
+        else:
+            logger.warning("Logseq export enabled but paths not set - export disabled")
+    logger.info(f"AI text cleanup enabled: {AI_TEXT_CLEANUP_ENABLED}")
+    if AI_TEXT_CLEANUP_ENABLED:
+        logger.info("AI cleanup requires Qwen model loaded in OCR API")
+    logger.info(f"PDF debug mode: {PDF_DEBUG_MODE}")
+    if PDF_DEBUG_MODE:
+        logger.warning("PDF DEBUG MODE ENABLED - Bounding boxes will be visible in red!")
 
     # Ensure directories exist
     DATA_PATH.mkdir(parents=True, exist_ok=True)

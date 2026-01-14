@@ -37,6 +37,7 @@ Processes Supernote `.note` files using Apple Vision Framework OCR to replace Su
 - **High-quality OCR**: Replaces Supernote's built-in OCR with Apple Vision Framework (+41.8% more text captured)
 - **Fast processing**: 0.8 seconds per page average (150x faster than Qwen2.5-VL)
 - **Word-level bounding boxes**: Each word gets its own precise bounding box using Vision's `boundingBoxForRange` API, matching the device's native OCR format for perfect search highlighting
+- **Searchable PDF export**: Generate PDFs with invisible OCR text layer for perfect search and indexing in any PDF viewer
 - **Line break preservation**: Detects line structure from Y-coordinates, maintains paragraph formatting
 - **Smart tracking**: SQLite database tracks file hashes to avoid reprocessing unchanged files
 - **Backup protection**: Creates timestamped backups before modifying any file
@@ -133,6 +134,41 @@ Once installed, OCR runs automatically:
 # Uninstall
 ./scripts/install-ocr-enhancer-launchd.sh --remove
 ```
+
+---
+
+## Manual Sync Wrapper (Recommended for Mac App Users)
+
+If you use the **Supernote Partner Mac app** and want **full control** over when sync and OCR happen, use the manual wrapper:
+
+### Quick Start
+
+```bash
+# 1. Install the wrapper
+./install-sync-wrapper.sh
+
+# 2. Run it whenever you want to sync
+./supernote-sync-wrapper.sh
+
+# Or use the alias (if configured)
+supernote-sync
+```
+
+### What It Does
+
+1. ✅ Opens Supernote Partner automatically
+2. ✅ Waits for YOU to sync and close the app
+3. ✅ Automatically runs OCR processing when you close it
+4. ✅ Asks if you want to reopen the app to sync changes back
+
+### Why Use This?
+
+- **Full control**: You decide when to sync, not a cron job
+- **Visual feedback**: See exactly what's happening
+- **No surprises**: App opens/closes only when you run the script
+- **Perfect for laptops**: No background processes, runs only when you want
+
+See [SYNC-WRAPPER.md](SYNC-WRAPPER.md) for detailed documentation.
 
 ---
 
