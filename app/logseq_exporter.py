@@ -30,6 +30,137 @@ def sanitize_filename(name: str) -> str:
     return name
 
 
+def build_flat_filename_from_path(rel_path: Path) -> str:
+    """
+    Generate a flat filename from a relative path, avoiding conflicts.
+    
+    Examples:
+    - Path('nota.md') -> 'nota.md'
+    - Path('ProyectoA/Cliente1/nota1.md') -> 'ProyectoA_Cliente1_nota1.md'
+    - Path('AreaX/SubareaY/notaZ.md') -> 'AreaX_SubareaY_notaZ.md'
+    
+    Args:
+        rel_path: Relative path from supernote_export/
+        
+    Returns:
+        Flat filename with path segments joined by underscores
+    """
+    if len(rel_path.parts) <= 1:
+        # Root level file, keep original name
+        return rel_path.name
+    
+    # Join parent directories with underscore, then add filename
+    parent_segments = '_'.join(rel_path.parts[:-1])
+    filename = rel_path.name
+    return f"{parent_segments}_{filename}"
+
+
+def build_page_properties_from_path(rel_path: Path) -> dict:
+    """
+    Generate Logseq page properties from a relative path.
+    
+    Examples:
+    - Path('nota.md') -> {'source': 'Supernote', 'path': 'Supernote', 'tags': ['[[Supernote]]']}
+    - Path('ProyectoA/Cliente1/nota1.md') -> {
+        'source': 'Supernote',
+        'path': 'Supernote/ProyectoA/Cliente1',
+        'tags': ['[[Supernote]]', '[[Supernote/ProyectoA]]', '[[Supernote/ProyectoA/Cliente1]]']
+      }
+    
+    Args:
+        rel_path: Relative path from supernote_export/
+        
+    Returns:
+        Dictionary with source, path, and tags properties
+    """
+    # Remove file extension to get folder path
+    if len(rel_path.parts) <= 1:
+        # Root level file
+        path_segments = []
+    else:
+        path_segments = list(rel_path.parts[:-1])  # All parts except filename
+    
+    # Build path property
+    path_property = "Supernote"
+    if path_segments:
+        path_property += "/" + "/".join(path_segments)
+    
+    # Build cumulative tags
+    tags = ["[[Supernote]]"]
+    cumulative_path = "Supernote"
+    for segment in path_segments:
+        cumulative_path += "/" + segment
+        tags.append(f"[[{cumulative_path}]]")
+    
+    return {
+        'source': 'Supernote',
+        'path': path_property,
+        'tags': tags
+    }
+
+
+def merge_properties_with_content(content: str, properties: dict) -> str:
+    """
+    Merge properties into the first property block of Logseq content.
+    
+    If no property block exists, creates one at the beginning.
+    Preserves existing properties and adds/updates source, path, tags.
+    
+    Args:
+        content: Existing markdown content
+        properties: Dictionary of properties to add/update
+        
+    Returns:
+        Content with merged properties
+    """
+    lines = content.split('\n')
+    property_start = -1
+    property_end = -1
+    existing_properties = {}
+    
+    # Find existing property block (lines with "key:: value" pattern)
+    for i, line in enumerate(lines):
+        if '::' in line and line.strip():
+            if property_start == -1:
+                property_start = i
+            # Parse existing property
+            key, value = line.split('::', 1)
+            existing_properties[key.strip()] = value.strip()
+            property_end = i + 1  # Update end as we find properties
+        elif property_start != -1 and line.strip() and '::' not in line:
+            # Property block ended
+            break
+        elif property_start != -1 and not line.strip():
+            # Empty line within property block - continue
+            continue
+        else:
+            # No property block yet, continue
+            continue
+    
+    # Merge properties (new ones override existing)
+    merged_properties = {**existing_properties, **properties}
+    
+    # Build property block
+    property_lines = []
+    for key, value in merged_properties.items():
+        if key == 'tags' and isinstance(value, list):
+            # Tags as comma-separated list
+            property_lines.append(f"{key}:: {', '.join(value)}")
+        else:
+            property_lines.append(f"{key}:: {value}")
+    
+    # Rebuild content
+    if property_start >= 0:
+        # Replace existing property block
+        before = lines[:property_start]
+        after = lines[property_end:]
+        
+        return '\n'.join(before + property_lines + [''] + after)
+    else:
+        # Add property block at beginning
+        return '\n'.join(property_lines + [''] + lines)
+
+
 def calculate_average_confidence(page_results: Dict[int, Tuple[OCRResult, int, int]]) -> float:
     """Calculate average OCR confidence across all pages."""
     total_confidence = 0.0
@@ -179,7 +310,7 @@ def format_text_for_logseq(text: str, indent: str = "    ") -> list[str]:
     return lines
 
 
-def export_note_to_logseq(
+def export_note_to_logseq_flat(
     note_path: Path,
     page_results: Dict[int, Tuple[OCRResult, int, int]],
     supernote_data_path: Path,
@@ -189,29 +320,37 @@ def export_note_to_logseq(
     ocr_client: Optional['OCRClient'] = None
 ) -> Optional[Path]:
     """
-    Export a Supernote .note file to Logseq markdown format.
+    Export a Supernote .note file to Logseq markdown format with flat structure.
+    
+    This version creates a flat file structure in pages/ and preserves hierarchy
+    in page properties (source, path, tags).
     
     Args:
         note_path: Path to the .note file
         page_results: Dict mapping page_num to (OCRResult, width, height)
         supernote_data_path: Base path of Supernote data directory
-        logseq_pages_path: Base path for Logseq pages (e.g., ~/logseq/pages/supernote)
+        logseq_pages_path: Base path for Logseq pages (e.g., ~/logseq/pages)
         logseq_assets_path: Base path for Logseq assets (e.g., ~/logseq/assets)
         pdf_source_path: Optional path to existing PDF to copy (if None, assumes PDF export is separate)
+        ocr_client: Optional OCR client for AI summaries
         
     Returns:
         Path to the generated markdown file, or None if export failed
     """
     try:
-        # Calculate relative path to preserve directory structure
+        # Calculate relative path from supernote data directory
         rel_path = note_path.relative_to(supernote_data_path)
         
-        # Output paths
-        md_output_path = logseq_pages_path / rel_path.parent / f"{rel_path.stem}.md"
-        pdf_asset_path = logseq_assets_path / "supernote" / rel_path.parent / f"{rel_path.stem}.pdf"
+        # Generate flat filename and properties
+        flat_filename = build_flat_filename_from_path(rel_path)
+        page_properties = build_page_properties_from_path(rel_path)
         
-        # Ensure output directories exist
-        md_output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Output paths - flat structure
+        md_output_path = logseq_pages_path / flat_filename
+        pdf_asset_path = logseq_assets_path / "supernote" / flat_filename.replace('.md', '.pdf')
+        
+        # Ensure output directories exist (flat structure)
+        logseq_pages_path.mkdir(parents=True, exist_ok=True)
         pdf_asset_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Copy or generate PDF for Logseq assets
@@ -249,8 +388,8 @@ def export_note_to_logseq(
         num_pages = len(page_results)
         word_count = len(full_text.split())
         
-        # Generate tags
-        tags = generate_tags(rel_path, full_text)
+        # Generate additional tags from content (keep existing function)
+        content_tags = generate_tags(rel_path, full_text)
         
         # Generate summary if multi-page
         summary = None
@@ -264,25 +403,25 @@ def export_note_to_logseq(
             if not summary:
                 summary = generate_summary(full_text)
         
-        # Build Logseq markdown
+        # Build Logseq markdown content
         lines = []
         
         # PDF link with metadata (using image syntax for proper PDF embedding)
-        pdf_rel_path = f"../assets/supernote/{rel_path.parent}/{rel_path.stem}.pdf"
-        pdf_name = rel_path.stem
+        pdf_rel_path = f"../assets/supernote/{flat_filename.replace('.md', '.pdf')}"
+        pdf_name = Path(flat_filename).stem
         lines.append(f"![{pdf_name}]({pdf_rel_path})")
         
-        # Metadata properties
+        # Metadata as bullet points
         processing_date = format_logseq_date(datetime.now())
         lines.append(f"  - **Fecha procesamiento**: {processing_date}")
-        lines.append(f"  - **Fuente**: Supernote")
         lines.append(f"  - **Confianza OCR**: {avg_confidence:.1f}%")
         lines.append(f"  - **Páginas**: {num_pages}")
         lines.append(f"  - **Palabras**: {word_count}")
         
-        # Tags
-        tag_str = ' '.join(f'#{tag}' for tag in tags)
-        lines.append(f"  - **Tags**: {tag_str}")
+        # Additional tags from content
+        if content_tags:
+            tag_str = ' '.join(f'#{tag}' for tag in content_tags)
+            lines.append(f"  - **Tags contenido**: {tag_str}")
         
         # Summary section (if multi-page)
         if summary:
@@ -304,13 +443,51 @@ def export_note_to_logseq(
             formatted_lines = format_text_for_logseq(full_text, indent="  ")
             lines.extend(formatted_lines)
         
-        # Write markdown file
+        # Build final content with properties
         md_content = '\n'.join(lines)
-        md_output_path.write_text(md_content, encoding='utf-8')
         
-        logger.info(f"Generated Logseq page: {md_output_path}")
+        # Merge page properties at the beginning
+        final_content = merge_properties_with_content(md_content, page_properties)
+        
+        # Write markdown file
+        md_output_path.write_text(final_content, encoding='utf-8')
+        
+        logger.info(f"Generated Logseq page (flat structure): {md_output_path}")
+        logger.debug(f"  - Flat filename: {flat_filename}")
+        logger.debug(f"  - Properties: source={page_properties['source']}, path={page_properties['path']}")
+        logger.debug(f"  - Tags: {', '.join(page_properties['tags'])}")
+        
         return md_output_path
         
     except Exception as e:
         logger.error(f"Failed to export Logseq page for {note_path}: {e}")
         return None
+
+
+# Keep the original function for backwards compatibility
+def export_note_to_logseq(
+    note_path: Path,
+    page_results: Dict[int, Tuple[OCRResult, int, int]],
+    supernote_data_path: Path,
+    logseq_pages_path: Path,
+    logseq_assets_path: Path,
+    pdf_source_path: Optional[Path] = None,
+    ocr_client: Optional['OCRClient'] = None
+) -> Optional[Path]:
+    """
+    Legacy wrapper for backwards compatibility.
+    
+    This function maintains the old hierarchical structure.
+    For new implementations, use export_note_to_logseq_flat() instead.
+    """
+    # Import the original implementation if needed, or redirect to flat version
+    # For now, redirect to flat version as it's the preferred approach
+    return export_note_to_logseq_flat(
+        note_path=note_path,
+        page_results=page_results,
+        supernote_data_path=supernote_data_path,
+        logseq_pages_path=logseq_pages_path,
+        logseq_assets_path=logseq_assets_path,
+        pdf_source_path=pdf_source_path,
+        ocr_client=ocr_client
+    )
