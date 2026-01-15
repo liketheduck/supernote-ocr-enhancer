@@ -431,6 +431,7 @@ def process_note_file(note_path: Path) -> ProcessingResult:
         # Export to Logseq markdown with PDF link if enabled
         if LOGSEQ_EXPORT_ENABLED and LOGSEQ_PAGES_PATH and LOGSEQ_ASSETS_PATH and cleaned_page_results:
             try:
+                logger.debug(f"  Logseq export - PDF path: {pdf_path}, exists: {pdf_path.exists() if pdf_path else None}")
                 logseq_md_path = export_note_to_logseq(
                     note_path,
                     cleaned_page_results,  # Use cleaned text for Logseq
