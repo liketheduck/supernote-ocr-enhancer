@@ -346,8 +346,8 @@ def export_note_to_logseq_flat(
         page_properties = build_page_properties_from_path(rel_path)
         
         # Output paths - flat structure
-        md_output_path = logseq_pages_path / flat_filename
-        pdf_asset_path = logseq_assets_path / "supernote" / flat_filename.replace('.md', '.pdf')
+        md_output_path = logseq_pages_path / flat_filename.replace('.note', '.md')
+        pdf_asset_path = logseq_assets_path / "supernote" / flat_filename.replace('.note', '.pdf')
         
         # Ensure output directories exist (flat structure)
         logseq_pages_path.mkdir(parents=True, exist_ok=True)
