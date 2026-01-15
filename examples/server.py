@@ -131,6 +131,19 @@ Critical constraints:
 - Do NOT repeat any single word more than twice in a row.
 - Your entire response must be ONLY the final transcription text, nothing else.""",
 
+    "visual_detection": """You are a visual content detector.
+
+Task:
+- Look at this image and determine if there are any drawings, diagrams, sketches, charts, or visual elements (not just text).
+- Answer with ONLY "yes" if you see any visual content, or "no" if it's only text.
+
+Critical constraints:
+- Respond with ONLY one word: "yes" or "no"
+- Do NOT explain your reasoning
+- Do NOT describe what you see
+- Drawings, sketches, diagrams, charts, graphs = "yes"
+- Handwritten or printed text only = "no" """,
+
     "ocr_layout": """Extract all text from this document image.
 Return a JSON object with:
 - "blocks": array of text blocks, each with "text", "bbox" [x1,y1,x2,y2] as percentages, and "type" (heading/paragraph/list/handwriting)

@@ -110,6 +110,53 @@ class OCRClient:
             time.sleep(5)
         return False
 
+    def detect_visual_content(self, image_bytes: bytes) -> bool:
+        """
+        Quick detection of visual content (drawings, diagrams) vs text-only.
+        
+        Uses a simple prompt to ask if there are drawings/diagrams.
+        Very lightweight - just a yes/no question.
+        
+        Args:
+            image_bytes: PNG image as bytes
+            
+        Returns:
+            True if visual content detected, False otherwise
+        """
+        try:
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            
+            payload = {
+                "image_base64": image_base64,
+                "prompt_type": "visual_detection",
+                "max_tokens": 10,  # Very short response
+                "temperature": 0.0
+            }
+            
+            resp = self.session.post(
+                f"{self.base_url}/ocr",
+                json=payload,
+                timeout=30  # Quick timeout
+            )
+            resp.raise_for_status()
+            
+            data = resp.json()
+            result = data.get("result", {})
+            response_text = result.get("full_text", "").lower()
+            
+            # Simple detection - look for keywords indicating visual content
+            visual_keywords = ["yes", "drawing", "diagram", "sketch", "image", "picture", "chart", "graph"]
+            has_visual = any(keyword in response_text for keyword in visual_keywords)
+            
+            if has_visual:
+                logger.debug("Visual content detected in image")
+            
+            return has_visual
+            
+        except Exception as e:
+            logger.debug(f"Visual detection failed: {e}")
+            return False  # Fail silently - don't break OCR flow
+
     def ocr_image(
         self,
         image_bytes: bytes,

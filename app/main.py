@@ -287,9 +287,36 @@ def process_note_file(note_path: Path) -> ProcessingResult:
                     pages_skipped += 1
                     continue
 
+                # Quick visual content detection (optional, fails silently)
+                has_drawing = False
+                try:
+                    has_drawing = ocr_client.detect_visual_content(page_data.png_bytes)
+                except Exception as e:
+                    logger.debug(f"  Visual detection skipped: {e}")
+
                 # Run OCR with Qwen2.5-VL (slower but more accurate)
                 logger.info(f"  OCR page {page_num + 1}/{total_pages} with Qwen (this will take 60-120s)...")
                 ocr_result = ocr_client.ocr_image(page_data.png_bytes, prompt_type="ocr_with_boxes")
+                
+                # Add drawing indicator if detected
+                if has_drawing:
+                    drawing_marker = "[📸 Dibujo] "
+                    # Prepend to full_text
+                    if ocr_result.full_text.strip():
+                        ocr_result.full_text = drawing_marker + ocr_result.full_text
+                    else:
+                        ocr_result.full_text = drawing_marker
+                    
+                    # Also add as a text block for proper positioning
+                    from ocr_client import TextBlock
+                    ocr_result.text_blocks.insert(0, TextBlock(
+                        text=drawing_marker.strip(),
+                        bbox=[10, 10, 200, 30],  # Top-left position
+                        confidence=1.0,
+                        block_type="drawing_marker"
+                    ))
+                    
+                    logger.info(f"  📸 Drawing detected on page {page_num + 1}")
 
                 # Store in database
                 db.store_page_result(
