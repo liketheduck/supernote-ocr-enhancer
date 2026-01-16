@@ -12,11 +12,12 @@ Generates Logseq markdown pages with:
 import logging
 import json
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from datetime import datetime
 import re
 
 from ocr_client import OCRResult
+from metadata_analyzer import MetadataAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,45 @@ def build_flat_filename_from_path(rel_path: Path) -> str:
     parent_segments = '_'.join(rel_path.parts[:-1])
     filename = rel_path.name
     return f"{parent_segments}_{filename}"
+
+
+def build_enhanced_frontmatter(note_date: Optional[str], 
+                               metadata, 
+                               enhanced_tags: List[str], 
+                               ocr_confidence: float) -> str:
+    """
+    Build enhanced front matter with AI-powered metadata.
+    
+    Args:
+        note_date: Extracted date from filename/content
+        metadata: NoteMetadata from analysis
+        enhanced_tags: Generated enhanced tags
+        ocr_confidence: OCR confidence score
+        
+    Returns:
+        Front matter string with Logseq property format
+    """
+    properties = []
+    
+    # Core metadata
+    properties.append("source:: Supernote")
+    properties.append(f"path:: Supernote/{metadata.content_type}")
+    
+    if note_date:
+        properties.append(f"date:: {note_date}")
+    
+    properties.append(f"processed:: {datetime.now().strftime('%Y-%m-%d')}")
+    properties.append(f"ocr-confidence:: {ocr_confidence:.1f}%")
+    
+    # IA analysis
+    properties.append(f"language:: {metadata.language}")
+    properties.append(f"type:: [[Supernote/{metadata.content_type}]]")
+    
+    # Enhanced tags
+    tags_str = ", ".join(enhanced_tags)
+    properties.append(f"tags:: {tags_str}")
+    
+    return "\n".join(properties)
 
 
 def build_page_properties_from_path(rel_path: Path) -> dict:
@@ -341,9 +381,27 @@ def export_note_to_logseq_flat(
         # Calculate relative path from supernote data directory
         rel_path = note_path.relative_to(supernote_data_path)
         
-        # Generate flat filename and properties
+        # Generate flat filename
         flat_filename = build_flat_filename_from_path(rel_path)
-        page_properties = build_page_properties_from_path(rel_path)
+        
+        # Collect all OCR text for analysis
+        sorted_pages = sorted(page_results.items())
+        page_texts = []
+        for page_num, (ocr_result, _, _) in sorted_pages:
+            page_texts.append(ocr_result.full_text)
+        
+        full_text = '\n\n'.join(page_texts)
+        
+        # AI-powered metadata analysis
+        analyzer = MetadataAnalyzer(ocr_client)
+        note_date = analyzer.extract_note_date(note_path.name, full_text)
+        metadata, enhanced_tags = analyzer.analyze_note(full_text, note_path.name, use_ai=bool(ocr_client))
+        
+        logger.info(f"  🤖 Analysis: type={metadata.content_type}, tags={len(enhanced_tags)}, date={note_date}")
+        logger.info(f"  🏷️  Enhanced tags: {', '.join(enhanced_tags[:3])}{'...' if len(enhanced_tags) > 3 else ''}")
+        
+        # Calculate metadata
+        avg_confidence = calculate_average_confidence(page_results)
         
         # Output paths - flat structure
         md_output_path = logseq_pages_path / flat_filename.replace('.note', '.md')
@@ -393,23 +451,11 @@ def export_note_to_logseq_flat(
                     logger.warning(f"📄 Logseq PDF - Failed to generate PDF: {note_path}")
                     # Continue anyway - markdown will be created with broken PDF link
         
-        # Collect all OCR text
-        sorted_pages = sorted(page_results.items())
-        page_texts = []
-        for page_num, (ocr_result, _, _) in sorted_pages:
-            page_texts.append(ocr_result.full_text)
-        
-        full_text = '\n\n'.join(page_texts)
-        
-        # Calculate metadata
-        avg_confidence = calculate_average_confidence(page_results)
+        # Calculate remaining metadata
         num_pages = len(page_results)
         word_count = len(full_text.split())
         
-        # Generate additional tags from content (keep existing function)
-        content_tags = generate_tags(rel_path, full_text)
-        
-        # Generate summary if multi-page
+        # Generate summary if multi-page (keep existing logic)
         summary = None
         if num_pages > 3:
             # Try AI summary first if ocr_client available
@@ -421,6 +467,14 @@ def export_note_to_logseq_flat(
             if not summary:
                 summary = generate_summary(full_text)
         
+        # Build enhanced front matter
+        enhanced_frontmatter = build_enhanced_frontmatter(
+            note_date=note_date,
+            metadata=metadata,
+            enhanced_tags=enhanced_tags,
+            ocr_confidence=avg_confidence
+        )
+        
         # Build Logseq markdown content
         lines = []
         
@@ -429,51 +483,42 @@ def export_note_to_logseq_flat(
         pdf_name = Path(flat_filename).stem
         lines.append(f"![{pdf_name}]({pdf_rel_path})")
         
-        # Metadata as bullet points
-        processing_date = format_logseq_date(datetime.now())
-        lines.append(f"  - **Fecha procesamiento**: {processing_date}")
-        lines.append(f"  - **Confianza OCR**: {avg_confidence:.1f}%")
-        lines.append(f"  - **Páginas**: {num_pages}")
-        lines.append(f"  - **Palabras**: {word_count}")
+        lines.append("")
         
-        # Additional tags from content
-        if content_tags:
-            tag_str = ' '.join(f'#{tag}' for tag in content_tags)
-            lines.append(f"  - **Tags contenido**: {tag_str}")
+        # Add enhanced metadata block
+        lines.append("¦   - **Fecha procesamiento**: [[{}]]".format(datetime.now().strftime('%B %d, %Y')))
+        lines.append(f"¦   - **Confianza OCR**: {avg_confidence:.1f}%")
+        lines.append(f"¦   - **Páginas**: {num_pages}")
+        lines.append(f"¦   - **Palabras**: {word_count}")
+        lines.append(f"¦   - **Tipo contenido**: {metadata.content_type}")
+        lines.append(f"¦   - **Idioma**: {metadata.language}")
+        if note_date:
+            lines.append(f"¦   - **Fecha nota**: [[{note_date}]]")
         
-        # Summary section (if multi-page)
-        if summary:
-            lines.append("- ## Resumen")
-            lines.append(f"  - {summary}")
-        
-        # Content section
+        lines.append("")
         lines.append("- ## Contenido")
         
-        # Add page markers for multi-page notes
-        if num_pages > 1:
-            for page_num, (ocr_result, _, _) in sorted_pages:
-                lines.append(f"  - ### Página {page_num + 1}")
-                # Format text preserving paragraphs
-                formatted_lines = format_text_for_logseq(ocr_result.full_text, indent="    ")
-                lines.extend(formatted_lines)
-        else:
-            # Single page - format text preserving paragraphs
-            formatted_lines = format_text_for_logseq(full_text, indent="  ")
-            lines.extend(formatted_lines)
+        # Format OCR text for Logseq
+        formatted_text = format_text_for_logseq(full_text, "  ¦   ")
+        lines.extend(formatted_text)
         
-        # Build final content with properties
-        md_content = '\n'.join(lines)
+        # Add summary if generated
+        if summary:
+            lines.append("")
+            lines.append("- ## Resumen")
+            lines.append(f"  ¦   - {summary}")
         
-        # Merge page properties at the beginning
-        final_content = merge_properties_with_content(md_content, page_properties)
+        # Write markdown file with enhanced front matter
+        content_lines = [enhanced_frontmatter, ''] + lines
+        content = '\n'.join(content_lines)
         
         # Write markdown file
-        md_output_path.write_text(final_content, encoding='utf-8')
+        md_output_path.write_text(content, encoding='utf-8')
         
-        logger.info(f"Generated Logseq page (flat structure): {md_output_path}")
+        logger.info(f"Generated Logseq page (enhanced): {md_output_path}")
         logger.debug(f"  - Flat filename: {flat_filename}")
-        logger.debug(f"  - Properties: source={page_properties['source']}, path={page_properties['path']}")
-        logger.debug(f"  - Tags: {', '.join(page_properties['tags'])}")
+        logger.debug(f"  - Content type: {metadata.content_type}")
+        logger.debug(f"  - Enhanced tags: {', '.join(enhanced_tags[:3])}{'...' if len(enhanced_tags) > 3 else ''}")
         
         return md_output_path
         
