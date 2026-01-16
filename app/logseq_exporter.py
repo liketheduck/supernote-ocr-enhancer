@@ -508,8 +508,9 @@ def export_note_to_logseq_flat(
         
         # Generate flat filename and clean it
         flat_filename = build_flat_filename_from_path(rel_path)
-        # Clean the filename to remove Note_ and date prefixes
-        flat_filename = clean_page_title(flat_filename) + '.md'
+        # Remove .note extension first, then clean, then add .md
+        flat_filename_no_ext = flat_filename.replace('.note', '')
+        flat_filename = clean_page_title(flat_filename_no_ext) + '.md'
         
         # Collect all OCR text for analysis
         sorted_pages = sorted(page_results.items())
