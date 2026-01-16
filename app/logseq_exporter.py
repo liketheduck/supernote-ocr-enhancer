@@ -506,8 +506,10 @@ def export_note_to_logseq_flat(
         # Calculate relative path from supernote data directory
         rel_path = note_path.relative_to(supernote_data_path)
         
-        # Generate flat filename
+        # Generate flat filename and clean it
         flat_filename = build_flat_filename_from_path(rel_path)
+        # Clean the filename to remove Note_ and date prefixes
+        flat_filename = clean_page_title(flat_filename) + '.md'
         
         # Collect all OCR text for analysis
         sorted_pages = sorted(page_results.items())
@@ -529,8 +531,8 @@ def export_note_to_logseq_flat(
         avg_confidence = calculate_average_confidence(page_results)
         
         # Output paths - flat structure
-        md_output_path = logseq_pages_path / flat_filename.replace('.note', '.md')
-        pdf_asset_path = logseq_assets_path / "supernote" / flat_filename.replace('.note', '.pdf')
+        md_output_path = logseq_pages_path / flat_filename
+        pdf_asset_path = logseq_assets_path / "supernote" / flat_filename.replace('.md', '.pdf')
         
         # Ensure output directories exist (flat structure)
         logseq_pages_path.mkdir(parents=True, exist_ok=True)
@@ -607,7 +609,7 @@ def export_note_to_logseq_flat(
         
         # PDF link with clean title (using image syntax for proper PDF embedding)
         clean_title = clean_note_title(note_path.name)
-        pdf_filename = flat_filename.replace('.note', '.pdf')
+        pdf_filename = flat_filename.replace('.md', '.pdf')
         pdf_rel_path = f"../assets/supernote/{pdf_filename}"
         lines.append(f"![{clean_title}]({pdf_rel_path})")
         
