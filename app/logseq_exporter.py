@@ -49,13 +49,13 @@ def clean_note_title(filename: str) -> str:
     # Remove extension
     name_without_ext = Path(filename).stem
     
-    # Remove date prefix (YYYYMMDD_)
-    date_pattern = r'^\d{8}_'
-    name_without_date = re.sub(date_pattern, '', name_without_ext)
-    
-    # Remove 'Note_' prefix
+    # Remove 'Note_' prefix first
     note_pattern = r'^Note_'
-    clean_title = re.sub(note_pattern, '', name_without_date)
+    name_without_note = re.sub(note_pattern, '', name_without_ext)
+    
+    # Then remove date prefix (YYYYMMDD_)
+    date_pattern = r'^\d{8}_'
+    clean_title = re.sub(date_pattern, '', name_without_note)
     
     # If nothing left after removing prefixes, use original without extension
     if not clean_title.strip():
@@ -79,13 +79,13 @@ def clean_page_title(title: str) -> str:
     Returns:
         Clean title without date and prefixes
     """
-    # Remove date prefix (YYYYMMDD_)
-    date_pattern = r'^\d{8}_'
-    name_without_date = re.sub(date_pattern, '', title)
-    
-    # Remove 'Note_' prefix
+    # Remove 'Note_' prefix first
     note_pattern = r'^Note_'
-    clean_title = re.sub(note_pattern, '', name_without_date)
+    name_without_note = re.sub(note_pattern, '', title)
+    
+    # Then remove date prefix (YYYYMMDD_)
+    date_pattern = r'^\d{8}_'
+    clean_title = re.sub(date_pattern, '', name_without_note)
     
     # If nothing left after removing prefixes, use original
     if not clean_title.strip():
