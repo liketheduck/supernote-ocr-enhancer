@@ -64,6 +64,36 @@ def clean_note_title(filename: str) -> str:
     return clean_title.strip()
 
 
+def clean_page_title(title: str) -> str:
+    """
+    Clean page title by removing 'Note_' prefix and date prefixes.
+    
+    Examples:
+    - "Note_20251230_Comidas semana Navidades" -> "Comidas semana Navidades"
+    - "20251230_Comidas semana Navidades" -> "Comidas semana Navidades"
+    - "Note_Meeting notes" -> "Meeting notes"
+    
+    Args:
+        title: Original page title
+        
+    Returns:
+        Clean title without date and prefixes
+    """
+    # Remove date prefix (YYYYMMDD_)
+    date_pattern = r'^\d{8}_'
+    name_without_date = re.sub(date_pattern, '', title)
+    
+    # Remove 'Note_' prefix
+    note_pattern = r'^Note_'
+    clean_title = re.sub(note_pattern, '', name_without_date)
+    
+    # If nothing left after removing prefixes, use original
+    if not clean_title.strip():
+        clean_title = title
+    
+    return clean_title.strip()
+
+
 def build_flat_filename_from_path(rel_path: Path) -> str:
     """
     Generate a flat filename from a relative path, avoiding conflicts.
@@ -352,12 +382,13 @@ def format_logseq_date(date: datetime) -> str:
     return f"[[{date.strftime('%b')} {day}{suffix}, {date.year}]]"
 
 
-def format_content_for_logseq_outline(page_results: Dict[int, Tuple[OCRResult, int, int]]) -> List[str]:
+def format_content_for_logseq_outline(page_results: Dict[int, Tuple[OCRResult, int, int]], note_title: str = None) -> List[str]:
     """
     Format OCR content in native Logseq outline structure with page headers.
     
     Args:
         page_results: Dict mapping page_num to (OCRResult, width, height)
+        note_title: Optional note title to use in page headers
         
     Returns:
         List of formatted lines for Logseq outline structure
@@ -368,9 +399,18 @@ def format_content_for_logseq_outline(page_results: Dict[int, Tuple[OCRResult, i
     sorted_pages = sorted(page_results.items())
     total_pages = len(sorted_pages)
     
+    # Clean note title if provided
+    clean_title = clean_page_title(note_title) if note_title else None
+    
     for page_num, (ocr_result, _, _) in sorted_pages:
-        # Add page header
-        page_header = f"Página {page_num}/{total_pages}"
+        # Add page header with clean title if available
+        if clean_title and total_pages == 1:
+            # Single page - use title as header
+            page_header = clean_title
+        else:
+            # Multiple pages - use page number
+            page_header = f"Página {page_num}/{total_pages}"
+        
         lines.append(f"  - {page_header}")
         
         # Get page text
@@ -583,7 +623,7 @@ def export_note_to_logseq_flat(
         lines.append("- ## Contenido")
         
         # Format content in native Logseq outline structure
-        outline_content = format_content_for_logseq_outline(page_results)
+        outline_content = format_content_for_logseq_outline(page_results, note_path.name)
         lines.extend(outline_content)
         
         # Write markdown file with enhanced front matter
