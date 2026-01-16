@@ -91,7 +91,8 @@ def build_flat_filename_from_path(rel_path: Path) -> str:
 
 def build_enhanced_frontmatter(note_date: Optional[str], 
                                metadata, 
-                               enhanced_tags: List[str]) -> str:
+                               enhanced_tags: List[str], 
+                               ocr_confidence: float) -> str:
     """
     Build enhanced front matter with AI-powered metadata.
     
@@ -99,6 +100,7 @@ def build_enhanced_frontmatter(note_date: Optional[str],
         note_date: Extracted date from filename/content
         metadata: NoteMetadata from analysis
         enhanced_tags: Generated enhanced tags
+        ocr_confidence: OCR confidence score
         
     Returns:
         Front matter string with Logseq property format
@@ -113,8 +115,10 @@ def build_enhanced_frontmatter(note_date: Optional[str],
         properties.append(f"date:: {note_date}")
     
     properties.append(f"processed:: {datetime.now().strftime('%Y-%m-%d')}")
+    properties.append(f"ocr-confidence:: {ocr_confidence:.1f}%")
     
     # IA analysis
+    properties.append(f"language:: {metadata.language}")
     properties.append(f"type:: [[Supernote/{metadata.content_type}]]")
     
     # Enhanced tags
@@ -500,7 +504,8 @@ def export_note_to_logseq_flat(
         enhanced_frontmatter = build_enhanced_frontmatter(
             note_date=note_date,
             metadata=metadata,
-            enhanced_tags=enhanced_tags
+            enhanced_tags=enhanced_tags,
+            ocr_confidence=avg_confidence
         )
         
         # Build Logseq markdown content
@@ -516,11 +521,9 @@ def export_note_to_logseq_flat(
         
         # Add enhanced metadata block
         lines.append("¦   - **Fecha procesamiento**: [[{}]]".format(datetime.now().strftime('%B %d, %Y')))
-        lines.append(f"¦   - **Confianza OCR**: {avg_confidence:.1f}%")
         lines.append(f"¦   - **Páginas**: {num_pages}")
         lines.append(f"¦   - **Palabras**: {word_count}")
         lines.append(f"¦   - **Tipo contenido**: {metadata.content_type}")
-        lines.append(f"¦   - **Idioma**: {metadata.language}")
         if note_date:
             lines.append(f"¦   - **Fecha nota**: [[{note_date}]]")
         
