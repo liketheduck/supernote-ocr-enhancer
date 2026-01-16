@@ -92,7 +92,9 @@ def build_flat_filename_from_path(rel_path: Path) -> str:
 def build_enhanced_frontmatter(note_date: Optional[str], 
                                metadata, 
                                enhanced_tags: List[str], 
-                               ocr_confidence: float) -> str:
+                               ocr_confidence: float,
+                               num_pages: int,
+                               word_count: int) -> str:
     """
     Build enhanced front matter with AI-powered metadata.
     
@@ -101,6 +103,8 @@ def build_enhanced_frontmatter(note_date: Optional[str],
         metadata: NoteMetadata from analysis
         enhanced_tags: Generated enhanced tags
         ocr_confidence: OCR confidence score
+        num_pages: Number of pages in the note
+        word_count: Word count of the note
         
     Returns:
         Front matter string with Logseq property format
@@ -108,14 +112,20 @@ def build_enhanced_frontmatter(note_date: Optional[str],
     properties = []
     
     # Core metadata
-    properties.append("source:: Supernote")
+    properties.append("source:: [[Supernote]]")
     properties.append(f"path:: Supernote/{metadata.content_type}")
     
     if note_date:
         properties.append(f"date:: {note_date}")
     
-    properties.append(f"processed:: {datetime.now().strftime('%Y-%m-%d')}")
+    # Use Logseq date format
+    processed_date = datetime.now().strftime('%b %dth, %Y')
+    properties.append(f"processed:: [[{processed_date}]]")
     properties.append(f"ocr-confidence:: {ocr_confidence:.1f}%")
+    
+    # Additional metadata
+    properties.append(f"pages:: {num_pages}")
+    properties.append(f"words:: {word_count}")
     
     # IA analysis
     properties.append(f"language:: {metadata.language}")
@@ -342,14 +352,56 @@ def format_logseq_date(date: datetime) -> str:
     return f"[[{date.strftime('%b')} {day}{suffix}, {date.year}]]"
 
 
-def format_text_for_logseq(text: str, indent: str = "    ") -> list[str]:
+def format_content_for_logseq_outline(page_results: Dict[int, Tuple[OCRResult, int, int]]) -> List[str]:
     """
-    Format OCR text for Logseq, preserving paragraphs.
+    Format OCR content in native Logseq outline structure with page headers.
     
-    Rules:
-    - Blank lines (double newline) separate paragraphs
-    - Lines within a paragraph are joined together
-    - Each paragraph becomes one bullet point
+    Args:
+        page_results: Dict mapping page_num to (OCRResult, width, height)
+        
+    Returns:
+        List of formatted lines for Logseq outline structure
+    """
+    lines = []
+    
+    # Sort pages by page number
+    sorted_pages = sorted(page_results.items())
+    total_pages = len(sorted_pages)
+    
+    for page_num, (ocr_result, _, _) in sorted_pages:
+        # Add page header
+        page_header = f"Página {page_num}/{total_pages}"
+        lines.append(f"  - {page_header}")
+        
+        # Get page text
+        page_text = ocr_result.full_text.strip()
+        
+        if page_text:
+            # Split by paragraphs (double newlines)
+            paragraphs = page_text.split('\n\n')
+            
+            for para in paragraphs:
+                if not para.strip():
+                    continue
+                
+                # Clean up paragraph text
+                para_lines = [line.strip() for line in para.split('\n') if line.strip()]
+                para_text = ' '.join(para_lines)
+                
+                if para_text:
+                    # Add as child element with proper indentation
+                    lines.append(f"    - {para_text}")
+        
+        # Add empty line between pages for readability
+        if page_num < total_pages:
+            lines.append("")
+    
+    return lines
+
+
+def format_text_for_logseq(text: str, indent: str) -> List[str]:
+    """
+    Format OCR text for Logseq with proper indentation.
     
     Args:
         text: OCR text to format
@@ -505,7 +557,9 @@ def export_note_to_logseq_flat(
             note_date=note_date,
             metadata=metadata,
             enhanced_tags=enhanced_tags,
-            ocr_confidence=avg_confidence
+            ocr_confidence=avg_confidence,
+            num_pages=num_pages,
+            word_count=word_count
         )
         
         # Build Logseq markdown content
@@ -519,26 +573,18 @@ def export_note_to_logseq_flat(
         
         lines.append("")
         
-        # Add enhanced metadata block
-        lines.append("¦   - **Fecha procesamiento**: [[{}]]".format(datetime.now().strftime('%B %d, %Y')))
-        lines.append(f"¦   - **Páginas**: {num_pages}")
-        lines.append(f"¦   - **Palabras**: {word_count}")
-        lines.append(f"¦   - **Tipo contenido**: {metadata.content_type}")
-        if note_date:
-            lines.append(f"¦   - **Fecha nota**: [[{note_date}]]")
-        
-        lines.append("")
-        lines.append("- ## Contenido")
-        
-        # Format OCR text for Logseq
-        formatted_text = format_text_for_logseq(full_text, "  ¦   ")
-        lines.extend(formatted_text)
-        
         # Add summary if generated
         if summary:
+            lines.append("- ## Resumen generado")
+            lines.append(f"  - {summary}")
             lines.append("")
-            lines.append("- ## Resumen")
-            lines.append(f"  ¦   - {summary}")
+        
+        # Add content with outline structure
+        lines.append("- ## Contenido")
+        
+        # Format content in native Logseq outline structure
+        outline_content = format_content_for_logseq_outline(page_results)
+        lines.extend(outline_content)
         
         # Write markdown file with enhanced front matter
         content_lines = [enhanced_frontmatter, ''] + lines
