@@ -31,6 +31,39 @@ def sanitize_filename(name: str) -> str:
     return name
 
 
+def clean_note_title(filename: str) -> str:
+    """
+    Clean note title by removing date prefix and 'Note_' prefix.
+    
+    Examples:
+    - "Note_20251230_Comidas semana Navidades.note" -> "Comidas semana Navidades"
+    - "20251230_Comidas semana Navidades.note" -> "Comidas semana Navidades"
+    - "Note_Meeting notes.note" -> "Meeting notes"
+    
+    Args:
+        filename: Original filename with extension
+        
+    Returns:
+        Clean title without date and prefixes
+    """
+    # Remove extension
+    name_without_ext = Path(filename).stem
+    
+    # Remove date prefix (YYYYMMDD_)
+    date_pattern = r'^\d{8}_'
+    name_without_date = re.sub(date_pattern, '', name_without_ext)
+    
+    # Remove 'Note_' prefix
+    note_pattern = r'^Note_'
+    clean_title = re.sub(note_pattern, '', name_without_date)
+    
+    # If nothing left after removing prefixes, use original without extension
+    if not clean_title.strip():
+        clean_title = name_without_ext
+    
+    return clean_title.strip()
+
+
 def build_flat_filename_from_path(rel_path: Path) -> str:
     """
     Generate a flat filename from a relative path, avoiding conflicts.
@@ -478,10 +511,11 @@ def export_note_to_logseq_flat(
         # Build Logseq markdown content
         lines = []
         
-        # PDF link with metadata (using image syntax for proper PDF embedding)
-        pdf_rel_path = f"../assets/supernote/{flat_filename.replace('.md', '.pdf')}"
-        pdf_name = Path(flat_filename).stem
-        lines.append(f"![{pdf_name}]({pdf_rel_path})")
+        # PDF link with clean title (using image syntax for proper PDF embedding)
+        clean_title = clean_note_title(note_path.name)
+        pdf_filename = flat_filename.replace('.note', '.pdf')
+        pdf_rel_path = f"../assets/supernote/{pdf_filename}"
+        lines.append(f"![{clean_title}]({pdf_rel_path})")
         
         lines.append("")
         
