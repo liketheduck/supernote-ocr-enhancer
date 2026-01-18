@@ -180,30 +180,29 @@ class MetadataAnalyzer:
         
         # Type-specific tag extraction
         if content_type == "Meal-Planning":
-            food_patterns = [
+            all_patterns = [
                 r'\b(turkey|salmon|pasta|cod|beer|chicken|mustard|broccoli|gnocchi|pavo|bacalao|cerveza|pepas|mostaza)\b',
                 r'\b(breakfast|lunch|dinner|meal|desayuno|almuerzo|cena|comida)\b',
                 r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|lunes|martes|miércoles|jueves|viernes|sábado|domingo)\b'
             ]
         elif content_type == "Meeting":
-            meeting_patterns = [
+            all_patterns = [
                 r'\b(meeting|agenda|reunión|reunion)\b',
                 r'\b(action|decision|agreement|acuerdo)\b',
                 r'\b(present|attendee|participant|asistente)\b'
             ]
         elif content_type == "Planning":
-            planning_patterns = [
+            all_patterns = [
                 r'\b(plan|goal|objective|objetivo|meta)\b',
                 r'\b(deadline|due date|plazo|fecha)\b',
                 r'\b(project|task|proyecto|tarea)\b'
             ]
         else:
             # Generic patterns for other types
-            food_patterns = [r'\b\w{4,}\b']  # Words 4+ chars
+            all_patterns = [r'\b\w{4,}\b']  # Words 4+ chars
         
         # Extract tags using patterns
         tags = set()
-        all_patterns = food_patterns if content_type == "Meal-Planning" else food_patterns
         
         for pattern in all_patterns:
             matches = re.findall(pattern, content_lower)
