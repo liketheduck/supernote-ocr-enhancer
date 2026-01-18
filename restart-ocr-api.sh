@@ -33,12 +33,12 @@ echo "✓ Started OCR API"
 
 # Wait for it to be ready (check health endpoint)
 echo "⏳ Waiting for OCR API to be ready..."
-for i in {1..60}; do
+for i in {1..160}; do
     if curl -s http://localhost:8100/health > /dev/null 2>&1; then
         echo "✓ OCR API is ready (after ${i}s)"
         break
     fi
-    if [ $i -eq 60 ]; then
+    if [ $i -eq 160 ]; then
         echo "❌ OCR API failed to start after 60s"
         exit 1
     fi

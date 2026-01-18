@@ -12,12 +12,17 @@ echo ""
 # Activate virtual environment
 source .venv/bin/activate
 
+
+# Restart OCR API
+echo "📱 Restarting OCR API..."
+./restart-ocr-api.sh&
+
 # Launch app and run OCR on exit
 echo "📱 Launching Supernote app..."
 echo "💡 When you close the app, OCR will run automatically"
 echo ""
 
-open "/Applications/Supernote.app"
+open "/Applications/Supernote Partner.app"
 
 # Wait for app to close
 echo "⏳ Waiting for Supernote app to close..."

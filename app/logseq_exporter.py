@@ -409,7 +409,7 @@ def format_content_for_logseq_outline(page_results: Dict[int, Tuple[OCRResult, i
             page_header = clean_title
         else:
             # Multiple pages - use page number
-            page_header = f"Página {page_num}/{total_pages}"
+            page_header = f"Page {page_num}/{total_pages}"
         
         lines.append(f"  - {page_header}")
         
@@ -618,12 +618,12 @@ def export_note_to_logseq_flat(
         
         # Add summary if generated
         if summary:
-            lines.append("- ## Resumen generado")
+            lines.append("- ## Generated Summary")
             lines.append(f"  - {summary}")
             lines.append("")
         
         # Add content with outline structure
-        lines.append("- ## Contenido")
+        lines.append("- ## Content")
         
         # Format content in native Logseq outline structure
         outline_content = format_content_for_logseq_outline(page_results, note_path.name)

@@ -16,7 +16,7 @@ echo ""
 source .venv/bin/activate
 
 # Configuration
-SUPERNOTE_APP_PATH="/Applications/Supernote.app"
+SUPERNOTE_APP_PATH="/Applications/Supernote Partner.app"
 SUPERNOTE_BUNDLE_ID="com.ratta.supernote"
 OCR_SCRIPT="./run-native.sh"
 
@@ -49,6 +49,19 @@ run_ocr_processing() {
     echo "⏳ Waiting 3 seconds for file sync to complete..."
     sleep 3
     
+    # Wait for OCR API to be ready (in case restart is still running)
+    echo "🔍 Checking OCR API status..."
+    for i in {1..30}; do
+        if curl -s http://localhost:8100/health > /dev/null 2>&1; then
+            echo "✅ OCR API is ready!"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo "⚠️  Warning: OCR API not ready after 30s, proceeding anyway..."
+        fi
+        sleep 1
+    done
+    
     # Run the OCR script
     if [ -f "$OCR_SCRIPT" ]; then
         echo "📝 Executing: $OCR_SCRIPT"
@@ -68,7 +81,11 @@ run_ocr_processing() {
 
 # Function to monitor app status
 monitor_app() {
-    echo "🚀 Launching Supernote app..."
+    echo "🔄 Restarting OCR API in parallel..."
+    ./restart-ocr-api.sh &
+    OCR_API_PID=$!
+    
+    echo "🚀 Launching Supernote Partner app..."
     echo "💡 Use the app normally. When you close it, OCR will run automatically."
     echo "⏳ Monitoring Supernote app status..."
     echo ""

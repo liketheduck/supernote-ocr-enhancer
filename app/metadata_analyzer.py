@@ -31,12 +31,12 @@ class MetadataAnalyzer:
     
     # Content type classification patterns
     CONTENT_TYPES = {
-        "Meal-Planning": ["comidas", "menu", "desayuno", "almuerzo", "cena", "food", "meal", "pepas", "pavo", "salmon", "pasta"],
-        "Meeting": ["reunión", "meeting", "agenda", "action items", "attendees", "minutes"],
-        "Notes": ["apuntes", "notas", "resumen", "puntos", "summary", "notes"],
-        "Ideas": ["idea", "concepto", "innovación", "brainstorm", "innovation", "concept"],
-        "Planning": ["plan", "planificación", "objetivos", "timeline", "goals", "planning"],
-        "Calendar": ["fecha", "agenda", "calendario", "evento", "date", "schedule", "L M X J V S D"],
+        "Meal-Planning": ["meals", "food", "menu", "breakfast", "lunch", "dinner", "meal", "comidas", "desayuno", "almuerzo", "cena", "pepas", "pavo", "salmon", "pasta"],
+        "Meeting": ["meeting", "agenda", "action items", "attendees", "minutes", "reunión", "reunion"],
+        "Notes": ["notes", "summary", "points", "apuntes", "notas", "resumen", "puntos"],
+        "Ideas": ["idea", "concept", "innovation", "brainstorm", "concepto", "innovación"],
+        "Planning": ["plan", "planning", "goals", "objectives", "timeline", "planificación", "objetivos"],
+        "Calendar": ["date", "calendar", "schedule", "event", "fecha", "agenda", "calendario", "evento", "L M X J V S D"],
         "Other": []
     }
     
@@ -59,7 +59,7 @@ class MetadataAnalyzer:
         Extract date from filename or content.
         
         Args:
-            filename: Note filename (e.g., "20251230_Comidas.note")
+            filename: Note filename (e.g., "20251230_Meals.note")
             content: OCR text content
             
         Returns:
@@ -181,21 +181,21 @@ class MetadataAnalyzer:
         # Type-specific tag extraction
         if content_type == "Meal-Planning":
             food_patterns = [
-                r'\b(pavo|salmon|pasta|bacalao|cerveza|pepas|mostaza|broccoli|gnocchi)\b',
-                r'\b(desayuno|almuerzo|cena|comida)\b',
-                r'\b(lunes|martes|miércoles|jueves|viernes|sábado|domingo)\b'
+                r'\b(turkey|salmon|pasta|cod|beer|chicken|mustard|broccoli|gnocchi|pavo|bacalao|cerveza|pepas|mostaza)\b',
+                r'\b(breakfast|lunch|dinner|meal|desayuno|almuerzo|cena|comida)\b',
+                r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|lunes|martes|miércoles|jueves|viernes|sábado|domingo)\b'
             ]
         elif content_type == "Meeting":
             meeting_patterns = [
-                r'\b(reunión|meeting|agenda)\b',
-                r'\b(action|decision|acuerdo)\b',
-                r'\b(present|attendee|asistente)\b'
+                r'\b(meeting|agenda|reunión|reunion)\b',
+                r'\b(action|decision|agreement|acuerdo)\b',
+                r'\b(present|attendee|participant|asistente)\b'
             ]
         elif content_type == "Planning":
             planning_patterns = [
-                r'\b(plan|objetivo|meta)\b',
-                r'\b(plazo|deadline|fecha)\b',
-                r'\b(proyecto|task|tarea)\b'
+                r'\b(plan|goal|objective|objetivo|meta)\b',
+                r'\b(deadline|due date|plazo|fecha)\b',
+                r'\b(project|task|proyecto|tarea)\b'
             ]
         else:
             # Generic patterns for other types
@@ -234,19 +234,19 @@ class MetadataAnalyzer:
         
         try:
             # Use AI model for analysis
-            prompt = f"""Analiza esta nota de Supernote y extrae SOLO:
+            prompt = f"""Analyze this Supernote note and extract ONLY:
 
-1. **Tipo de contenido**: Uno de [{", ".join(self.CONTENT_TYPES.keys())}]
-2. **Tags temáticos**: 3-5 tags relevantes del contenido
+1. **Content type**: One of [{", ".join(self.CONTENT_TYPES.keys())}]
+2. **Thematic tags**: 3-5 relevant content tags
 
-Ejemplos:
-- "L M X J V S D 30 31 1 2 3 4 5 6 M30: Pepas Mostaza + Cerveza" → tipo: "Meal-Planning", tags: ["food", "meal-planning", "weekly-menu"]
-- "Reunión equipo para discutir proyecto" → tipo: "Meeting", tags: ["work", "team", "project"]
+Examples:
+- "M T W T F S S 30 31 1 2 3 4 5 6 M30: Chicken Mustard + Beer" → type: "Meal-Planning", tags: ["food", "meal-planning", "weekly-menu"]
+- "Team meeting to discuss project" → type: "Meeting", tags: ["work", "team", "project"]
 
-Nota: {filename}
-Contenido: {content[:1000]}
+Note: {filename}
+Content: {content[:1000]}
 
-Responde JSON exacto: {{"type": "TIPO", "tags": ["tag1", "tag2", "tag3"]}}"""
+Respond with exact JSON: {{"type": "TYPE", "tags": ["tag1", "tag2", "tag3"]}}"""
 
             # Call AI API
             response = self.ocr_client.session.post(
