@@ -114,7 +114,7 @@ REGLAS:
 - `app/text_processor.py`
 
 **Archivos modificados:**
-- `/path/to/services/ocr-api/server.py` (endpoint `/generate`)
+- `ocr-api/server.py` (endpoint `/generate`)
 - `app/ocr_client.py` (método `generate_text()`)
 - `app/logseq_exporter.py` (usa AI summary si disponible)
 
@@ -175,7 +175,7 @@ PDF usa texto original (para mantener bounding boxes)
 ### Archivos Modificados
 
 #### OCR API
-1. `/path/to/services/ocr-api/server.py`
+1. `ocr-api/server.py`
    - Nuevos modelos: `TextGenerationRequest`, `TextGenerationResponse`
    - Nuevo endpoint: `POST /generate`
 

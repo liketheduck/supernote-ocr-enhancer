@@ -29,7 +29,7 @@ export OCR_PDF_EXPORT_PATH="/Users/yourusername/supernote-pdf"
 
 ```bash
 export OCR_PDF_EXPORT_ENABLED="true"
-export OCR_PDF_EXPORT_PATH="/path/to/supernote-pdf"
+export OCR_PDF_EXPORT_PATH="$HOME/supernote-pdf"
 ```
 
 ### In Docker:
