@@ -1,66 +1,66 @@
-# Integración con Logseq
+# Logseq Integration
 
-Exporta tus notas de Supernote a tu grafo de conocimiento de Logseq con OCR mejorado, enlaces a PDFs y metadata enriquecida.
+Export your Supernote notes to your Logseq knowledge graph with enhanced OCR, PDF links, and enriched metadata.
 
-## 🎯 Qué Hace
+## 🎯 What It Does
 
-Convierte cada archivo `.note` procesado en:
+Converts each processed `.note` file into:
 
-1. **Página de Logseq** (`.md`) con:
-   - Enlace al PDF en assets
-   - Metadata (fecha, fuente, confianza OCR)
-   - Tags autogeneradas
-   - Resumen automático (si >3 páginas)
-   - Texto OCR completo con formato
+1. **Logseq Page** (`.md`) with:
+   - Link to PDF in assets
+   - Metadata (date, source, OCR confidence)
+   - Auto-generated tags
+   - Automatic summary (if >3 pages)
+   - Complete OCR text with formatting
 
-2. **PDF en assets** (copia del PDF exportado)
-   - Ubicado en `assets/supernote/...`
-   - Mismo nombre y estructura de carpetas
+2. **PDF in assets** (copy of exported PDF)
+   - Located in `assets/supernote/...`
+   - Same name and folder structure
 
-## 📋 Configuración
+## 📋 Configuration
 
-### 1. Habilitar Exportación a Logseq
+### 1. Enable Logseq Export
 
-Edita tu `.env.local`:
+Edit your `.env.local`:
 
 ```bash
-# Habilitar exportación a Logseq
+# Enable Logseq export
 LOGSEQ_EXPORT_ENABLED=true
 
-# Ruta a tu directorio de páginas de Logseq
-# Las páginas se crearán bajo pages/supernote/
+# Path to your Logseq pages directory
+# Pages will be created under pages/supernote/
 LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote
 
-# Ruta a tu directorio de assets de Logseq
-# Los PDFs se copiarán aquí
+# Path to your Logseq assets directory
+# PDFs will be copied here
 LOGSEQ_ASSETS_PATH=~/Documents/logseq/assets
 ```
 
-### 2. Exportación de PDF (Opcional)
+### 2. PDF Export (Optional)
 
-**Logseq funciona independientemente** - el PDF se genera automáticamente para Logseq incluso si no tienes `OCR_PDF_EXPORT_ENABLED=true`.
+**Logseq works independently** - the PDF is generated automatically for Logseq even if you don't have `OCR_PDF_EXPORT_ENABLED=true`.
 
-#### Opción A: Solo Logseq (más simple)
+#### Option A: Logseq Only (simpler)
 
 ```bash
-# Solo habilitar Logseq
+# Only enable Logseq
 LOGSEQ_EXPORT_ENABLED=true
 LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote
 LOGSEQ_ASSETS_PATH=~/Documents/logseq/assets
 
-# PDF export NO necesario
+# PDF export NOT needed
 # OCR_PDF_EXPORT_ENABLED=false
 ```
 
-**Resultado:**
-- ✅ PDF se genera automáticamente en `logseq/assets/supernote/`
-- ✅ Enlaces funcionan correctamente
-- ✅ Más simple (menos configuración)
+**Result:**
+- ✅ PDF is automatically generated in `logseq/assets/supernote/`
+- ✅ Links work correctly
+- ✅ Simpler (less configuration)
 
-#### Opción B: Logseq + PDF Export separado (si quieres PDFs en otro lugar)
+#### Option B: Logseq + Separate PDF Export (if you want PDFs elsewhere)
 
 ```bash
-# Exportar PDFs a ubicación separada
+# Export PDFs to separate location
 OCR_PDF_EXPORT_ENABLED=true
 OCR_PDF_EXPORT_PATH=~/Documents/SupernotePDFs
 
@@ -70,15 +70,15 @@ LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote
 LOGSEQ_ASSETS_PATH=~/Documents/logseq/assets
 ```
 
-**Resultado:**
-- ✅ PDF en `~/Documents/SupernotePDFs/` (para backup/compartir)
-- ✅ PDF copiado a `logseq/assets/supernote/` (para Logseq)
-- ✅ Dos copias del mismo PDF (más espacio, pero más flexible)
+**Result:**
+- ✅ PDF in `~/Documents/SupernotePDFs/` (for backup/sharing)
+- ✅ PDF copied to `logseq/assets/supernote/` (for Logseq)
+- ✅ Two copies of the same PDF (more space, but more flexible)
 
-### 3. Estructura Completa Recomendada
+### 3. Complete Recommended Structure
 
 ```bash
-# Exportaciones de texto, PDF y Logseq
+# Text, PDF and Logseq exports
 OCR_TXT_EXPORT_ENABLED=true
 OCR_TXT_EXPORT_PATH=~/Documents/SupernoteText
 
@@ -90,16 +90,16 @@ LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote
 LOGSEQ_ASSETS_PATH=~/Documents/logseq/assets
 ```
 
-## 📁 Estructura de Archivos Generada
+## 📁 Generated File Structure
 
-### Ejemplo: Nota en Supernote
+### Example: Note in Supernote
 
 ```
 Supernote:
 /user/Note/Work/Meeting-2026-01-13.note
 ```
 
-### Archivos Generados
+### Generated Files
 
 ```
 TXT:
@@ -115,289 +115,289 @@ Logseq PDF Asset:
 ~/Documents/logseq/assets/supernote/user/Note/Work/Meeting-2026-01-13.pdf
 ```
 
-## 📝 Formato de Página Logseq
+## 📝 Logseq Page Format
 
-### Ejemplo de Salida
+### Example Output
 
 ```markdown
 - [[📄 ../assets/supernote/user/Note/Work/Meeting-2026-01-13.pdf]]
-  - **Fecha procesamiento**: [[Jan 13th, 2026]]
-  - **Fuente**: Supernote
-  - **Confianza OCR**: 94.2%
-  - **Páginas**: 5
-  - **Palabras**: 342
+  - **Processing date**: [[Jan 13th, 2026]]
+  - **Source**: Supernote
+  - **OCR confidence**: 94.2%
+  - **Pages**: 5
+  - **Words**: 342
   - **Tags**: #supernote #work #meeting
-- ## Resumen
-  - Reunión de planificación del proyecto Q1 2026. Discusión de objetivos, timeline y asignación de recursos. Acción items identificados para cada miembro del equipo.
-- ## Contenido
-  - ### Página 1
-    - Reunión de Planificación Q1 2026
-    - Fecha: 13 de enero, 2026
-    - Asistentes: Juan, María, Pedro
-  - ### Página 2
-    - Objetivos del Trimestre
-    - 1. Lanzar nueva funcionalidad X
-    - 2. Mejorar performance en 30%
-    - 3. Reducir bugs críticos a <5
-  - ### Página 3
+- ## Summary
+  - Q1 2026 project planning meeting. Discussion of objectives, timeline and resource allocation. Action items identified for each team member.
+- ## Content
+  - ### Page 1
+    - Q1 2026 Planning Meeting
+    - Date: January 13, 2026
+    - Attendees: John, Mary, Peter
+  - ### Page 2
+    - Quarter Objectives
+    - 1. Launch new feature X
+    - 2. Improve performance by 30%
+    - 3. Reduce critical bugs to <5
+  - ### Page 3
     - Timeline
-    - Enero: Diseño y planificación
-    - Febrero: Desarrollo
-    - Marzo: Testing y lanzamiento
-  - ### Página 4
-    - Asignación de Recursos
-    - Juan: Backend development
-    - María: Frontend + UX
-    - Pedro: QA + DevOps
-  - ### Página 5
+    - January: Design and planning
+    - February: Development
+    - March: Testing and launch
+  - ### Page 4
+    - Resource Allocation
+    - John: Backend development
+    - Mary: Frontend + UX
+    - Peter: QA + DevOps
+  - ### Page 5
     - Action Items
-    - [ ] Juan: Setup CI/CD pipeline
-    - [ ] María: Create mockups
-    - [ ] Pedro: Define test strategy
+    - [ ] John: Setup CI/CD pipeline
+    - [ ] Mary: Create mockups
+    - [ ] Peter: Define test strategy
 ```
 
-## 🏷️ Tags Autogeneradas
+## 🏷️ Auto-Generated Tags
 
-### Basadas en Estructura de Carpetas
+### Based on Folder Structure
 
 ```
-Ruta: /user/Note/Work/Projects/Alpha.note
+Path: /user/Note/Work/Projects/Alpha.note
 Tags: #supernote #work #projects #alpha
 ```
 
-### Basadas en Contenido (Heurísticas)
+### Based on Content (Heuristics)
 
-El sistema detecta palabras clave y añade tags relevantes:
+The system detects keywords and adds relevant tags:
 
-- **Meeting**: `#meeting` (detecta: meeting, agenda, minutes)
-- **Tasks**: `#tasks` (detecta: todo, task, action item)
-- **Ideas**: `#ideas` (detecta: idea, brainstorm, concept)
-- **Project**: `#project` (detecta: project, plan, roadmap)
+- **Meeting**: `#meeting` (detects: meeting, agenda, minutes)
+- **Tasks**: `#tasks` (detects: todo, task, action item)
+- **Ideas**: `#ideas` (detects: idea, brainstorm, concept)
+- **Project**: `#project` (detects: project, plan, roadmap)
 
-## 📊 Resumen Automático
+## 📊 Automatic Summary
 
-### Cuándo se Genera
+### When It's Generated
 
-- Solo para notas con **más de 3 páginas**
-- Extrae las primeras 2-3 frases del contenido
-- Máximo 200 caracteres
+- Only for notes with **more than 3 pages**
+- Extracts the first 2-3 sentences of content
+- Maximum 200 characters
 
-### Ejemplo
+### Example
 
 ```markdown
-- ## Resumen
-  - Reunión de planificación del proyecto Q1 2026. Discusión de objetivos, timeline y asignación de recursos.
+- ## Summary
+  - Q1 2026 project planning meeting. Discussion of objectives, timeline and resource allocation.
 ```
 
-## 🔗 Enlaces en Logseq
+## 🔗 Links in Logseq
 
-### Enlace al PDF
+### PDF Link
 
 ```markdown
 - [[📄 ../assets/supernote/user/Note/Work/Meeting.pdf]]
 ```
 
-Hace clic en el enlace → Abre el PDF en Logseq
+Click the link → Opens the PDF in Logseq
 
-### Enlace a Fecha (Journal)
+### Date Link (Journal)
 
 ```markdown
-- **Fecha procesamiento**: [[Jan 13th, 2026]]
+- **Processing date**: [[Jan 13th, 2026]]
 ```
 
-Hace clic → Va a tu journal de ese día
+Click → Goes to your journal for that day
 
-## 🔄 Flujo de Trabajo Completo
+## 🔄 Complete Workflow
 
-### Con Wrapper Manual
+### With Manual Wrapper
 
 ```bash
-# 1. Ejecutar wrapper
+# 1. Run wrapper
 supernote-sync
 
-# 2. Sincronizar notas en Supernote Partner
-# (el wrapper espera)
+# 2. Sync notes in Supernote Partner
+# (wrapper waits)
 
-# 3. Cerrar Supernote Partner
-# (el wrapper detecta y continúa)
+# 3. Close Supernote Partner
+# (wrapper detects and continues)
 
-# 4. Procesamiento automático:
-#    - OCR con Vision Framework
-#    - Genera TXT
-#    - Genera PDF
-#    - Genera página Logseq
-#    - Copia PDF a assets
+# 4. Automatic processing:
+#    - OCR with Vision Framework
+#    - Generate TXT
+#    - Generate PDF
+#    - Generate Logseq page
+#    - Copy PDF to assets
 
-# 5. Abrir Logseq
-# Tus notas ya están en el grafo
+# 5. Open Logseq
+# Your notes are already in the graph
 ```
 
-### Con Cron Automático
+### With Automatic Cron
 
 ```bash
-# Configurar cron (una vez)
+# Configure cron (once)
 ./scripts/install-ocr-enhancer-launchd.sh
 
-# Luego, automáticamente cada 6 horas:
-# - Detecta archivos nuevos/modificados
-# - Procesa OCR
-# - Exporta a TXT, PDF y Logseq
-# - Tus notas aparecen en Logseq
+# Then, automatically every 6 hours:
+# - Detects new/modified files
+# - Processes OCR
+# - Exports to TXT, PDF and Logseq
+# - Your notes appear in Logseq
 ```
 
-## 🎨 Personalización
+## 🎨 Customization
 
-### Modificar Template de Página
+### Modify Page Template
 
-Edita `app/logseq_exporter.py`, función `export_note_to_logseq()`:
+Edit `app/logseq_exporter.py`, function `export_note_to_logseq()`:
 
 ```python
-# Línea ~140: Construir markdown
+# Line ~140: Build markdown
 lines = []
 lines.append(f"- [[📄 {pdf_rel_path}]]")
-# Añade tus propios campos aquí
-lines.append(f"  - **Tu campo**: {tu_valor}")
+# Add your own fields here
+lines.append(f"  - **Your field**: {your_value}")
 ```
 
-### Mejorar Generación de Tags
+### Improve Tag Generation
 
-Edita `app/logseq_exporter.py`, función `generate_tags()`:
+Edit `app/logseq_exporter.py`, function `generate_tags()`:
 
 ```python
-# Línea ~40: Añadir más detección de keywords
-if 'tu_keyword' in text_lower:
-    tags.append('tu-tag')
+# Line ~40: Add more keyword detection
+if 'your_keyword' in text_lower:
+    tags.append('your-tag')
 ```
 
-### Mejorar Resumen
+### Improve Summary
 
-Actualmente usa extracción simple de frases. Para mejorar:
+Currently uses simple sentence extraction. To improve:
 
-**Opción 1: Usar LLM (Qwen)**
+**Option 1: Use LLM (Qwen)**
 
 ```python
-# En generate_summary()
-# Llamar al OCR API con prompt de resumen
+# In generate_summary()
+# Call OCR API with summary prompt
 summary = ocr_client.generate_summary(ocr_text)
 ```
 
-**Opción 2: Usar biblioteca de NLP**
+**Option 2: Use NLP library**
 
 ```python
-# Instalar: pip install sumy
+# Install: pip install sumy
 from sumy.summarizers.lsa import LsaSummarizer
-# Generar resumen extractivo
+# Generate extractive summary
 ```
 
-## 📈 Casos de Uso
+## 📈 Use Cases
 
-### 1. Notas de Reuniones
+### 1. Meeting Notes
 
 ```
 Supernote → OCR → Logseq
 - Tags: #meeting #work
-- Enlace a PDF para referencia
-- Búsqueda full-text en Logseq
-- Enlaces bidireccionales con otros proyectos
+- Link to PDF for reference
+- Full-text search in Logseq
+- Bidirectional links with other projects
 ```
 
-### 2. Diario Personal
+### 2. Personal Journal
 
 ```
 Supernote → OCR → Logseq
 - Tags: #journal #personal
-- Enlace automático a journal del día
-- Búsqueda por fecha
-- Revisión de entradas pasadas
+- Automatic link to day's journal
+- Search by date
+- Review past entries
 ```
 
-### 3. Ideas y Brainstorming
+### 3. Ideas and Brainstorming
 
 ```
 Supernote → OCR → Logseq
 - Tags: #ideas #brainstorm
-- Conexión con otros conceptos
-- Evolución de ideas a lo largo del tiempo
-- Exportar a otros formatos desde Logseq
+- Connection with other concepts
+- Evolution of ideas over time
+- Export to other formats from Logseq
 ```
 
-### 4. Apuntes de Estudio
+### 4. Study Notes
 
 ```
 Supernote → OCR → Logseq
 - Tags: #study #course-name
-- Organización por tema
-- Flashcards en Logseq
-- Repaso espaciado
+- Organization by topic
+- Flashcards in Logseq
+- Spaced repetition
 ```
 
 ## 🐛 Troubleshooting
 
-### Las páginas no aparecen en Logseq
+### Pages Don't Appear in Logseq
 
-**Problema**: Archivos `.md` creados pero no visibles en Logseq
+**Problem**: `.md` files created but not visible in Logseq
 
-**Solución**:
-1. Verifica que `LOGSEQ_PAGES_PATH` apunta a tu grafo correcto
-2. Reindexar en Logseq: `Cmd+Shift+R` o menú "Re-index"
-3. Verificar permisos de archivos: `ls -la ~/Documents/logseq/pages/supernote/`
+**Solution**:
+1. Verify that `LOGSEQ_PAGES_PATH` points to your correct graph
+2. Re-index in Logseq: `Cmd+Shift+R` or menu "Re-index"
+3. Check file permissions: `ls -la ~/Documents/logseq/pages/supernote/`
 
-### Los enlaces al PDF no funcionan
+### PDF Links Don't Work
 
-**Problema**: Click en enlace no abre el PDF
+**Problem**: Clicking link doesn't open the PDF
 
-**Solución**:
-1. Verifica que el PDF existe: `ls ~/Documents/logseq/assets/supernote/`
-2. Verifica la ruta relativa en el `.md`
-3. Asegúrate de que `OCR_PDF_EXPORT_ENABLED=true`
+**Solution**:
+1. Verify the PDF exists: `ls ~/Documents/logseq/assets/supernote/`
+2. Verify the relative path in the `.md`
+3. Make sure `OCR_PDF_EXPORT_ENABLED=true`
 
-### Tags no se generan correctamente
+### Tags Not Generated Correctly
 
-**Problema**: Solo aparece `#supernote`, faltan otras tags
+**Problem**: Only `#supernote` appears, other tags missing
 
-**Solución**:
-1. Revisa los logs: `tail -f data/cron-ocr.log`
-2. Verifica que el contenido OCR tiene texto: `cat archivo.txt`
-3. Personaliza `generate_tags()` para tu contenido específico
+**Solution**:
+1. Check the logs: `tail -f data/cron-ocr.log`
+2. Verify OCR content has text: `cat file.txt`
+3. Customize `generate_tags()` for your specific content
 
-### Resumen no se genera
+### Summary Not Generated
 
-**Problema**: Notas con >3 páginas no tienen resumen
+**Problem**: Notes with >3 pages don't have summary
 
-**Solución**:
-1. Verifica que el OCR extrajo texto: `cat archivo.txt`
-2. Revisa logs de exportación
-3. Ajusta `generate_summary()` si el formato no es compatible
+**Solution**:
+1. Verify OCR extracted text: `cat file.txt`
+2. Check export logs
+3. Adjust `generate_summary()` if format is incompatible
 
-## 🔮 Futuras Mejoras
+## 🔮 Future Improvements
 
-### Planeadas
+### Planned
 
-- [ ] Resumen con LLM (Qwen) para mejor calidad
-- [ ] Detección de TODOs y conversión a tasks de Logseq
-- [ ] Detección de fechas y creación de journal links
-- [ ] Extracción de entidades (personas, lugares, conceptos)
-- [ ] Sugerencias de enlaces a páginas existentes
-- [ ] Detección de idioma y metadata multilingüe
+- [ ] Summary with LLM (Qwen) for better quality
+- [ ] TODO detection and conversion to Logseq tasks
+- [ ] Date detection and journal link creation
+- [ ] Entity extraction (people, places, concepts)
+- [ ] Suggestions for links to existing pages
+- [ ] Language detection and multilingual metadata
 
-### Contribuciones Bienvenidas
+### Contributions Welcome
 
-Si implementas alguna mejora, considera contribuir al proyecto:
-1. Fork del repositorio
-2. Implementa tu feature
-3. Añade tests
-4. Pull request con descripción detallada
+If you implement any improvements, consider contributing to the project:
+1. Fork the repository
+2. Implement your feature
+3. Add tests
+4. Pull request with detailed description
 
-## 📚 Referencias
+## 📚 References
 
 - [Logseq Documentation](https://docs.logseq.com/)
 - [Logseq Markdown Format](https://docs.logseq.com/#/page/markdown)
 - [Supernote OCR Enhancer README](../README.md)
 - [PDF Export Documentation](./PDF_EXPORT.md)
 
-## 💬 Soporte
+## 💬 Support
 
-Si tienes problemas o sugerencias:
-1. Revisa los logs: `tail -f data/cron-ocr.log`
-2. Verifica la configuración en `.env.local`
-3. Abre un issue en GitHub con detalles y logs
+If you have problems or suggestions:
+1. Check the logs: `tail -f data/cron-ocr.log`
+2. Verify configuration in `.env.local`
+3. Open an issue on GitHub with details and logs

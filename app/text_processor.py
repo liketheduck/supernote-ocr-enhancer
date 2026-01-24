@@ -42,22 +42,22 @@ def cleanup_ocr_text_with_ai(ocr_text: str, ocr_client: OCRClient) -> str:
     text_to_clean = ocr_text[:2000] if len(ocr_text) > 2000 else ocr_text
     was_truncated = len(ocr_text) > 2000
     
-    prompt = f"""Eres un corrector de texto OCR. Tu tarea es limpiar y corregir el siguiente texto manteniendo EXACTAMENTE la estructura original.
+    prompt = f"""You are an OCR text corrector. Your task is to clean and correct the following text while maintaining EXACTLY the original structure.
 
-REGLAS ESTRICTAS:
-1. Corrige SOLO errores obvios de OCR (ej: "l0" → "lo", "rn" → "m")
-2. Une palabras fragmentadas (ej: "frag mentadas" → "fragmentadas")
-3. Corrige puntuación básica (espacios antes de puntos, mayúsculas después de punto)
-4. PRESERVA todos los saltos de línea y párrafos EXACTAMENTE como están
-5. NO cambies el significado ni el contenido
-6. NO añadas explicaciones, comentarios ni texto nuevo
-7. NO traduzcas ni parafrasees
-8. Devuelve SOLO el texto corregido, nada más
+STRICT RULES:
+1. Fix ONLY obvious OCR errors (e.g., "l0" → "lo", "rn" → "m")
+2. Join fragmented words (e.g., "frag mented" → "fragmented")
+3. Fix basic punctuation (spaces before periods, capitalization after periods)
+4. PRESERVE all line breaks and paragraphs EXACTLY as they are
+5. DO NOT change the meaning or content
+6. DO NOT add explanations, comments, or new text
+7. DO NOT translate or paraphrase
+8. Return ONLY the corrected text, nothing else
 
-Texto OCR:
+OCR Text:
 {text_to_clean}
 
-Texto corregido:"""
+Corrected text:"""
     
     try:
         logger.debug(f"Cleaning up OCR text ({len(text_to_clean)} chars)")
@@ -103,19 +103,19 @@ def generate_summary_with_ai(ocr_text: str, ocr_client: OCRClient, max_length: i
     # Use first ~2000 chars for summary
     text_to_summarize = ocr_text[:2000] if len(ocr_text) > 2000 else ocr_text
     
-    prompt = f"""Resume el siguiente texto en 2-3 frases concisas y claras. El resumen debe capturar las ideas principales.
+    prompt = f"""Summarize the following text in 2-3 concise and clear sentences. The summary should capture the main ideas.
 
-REGLAS:
-- Máximo 2-3 frases
-- Sé conciso pero informativo
-- Captura las ideas principales
-- NO añadas información que no esté en el texto
-- Escribe en el mismo idioma que el texto original
+RULES:
+- Maximum 2-3 sentences
+- Be concise but informative
+- Capture the main ideas
+- DO NOT add information that is not in the text
+- Write in the same language as the original text
 
-Texto:
+Text:
 {text_to_summarize}
 
-Resumen:"""
+Summary:"""
     
     try:
         logger.debug(f"Generating summary for {len(text_to_summarize)} chars of text")

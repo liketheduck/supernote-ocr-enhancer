@@ -1,43 +1,43 @@
-# Flujo de Exportación: PDF y Logseq
+# Export Flow: PDF and Logseq
 
-Diagrama visual de cómo funciona la exportación de PDFs con y sin Logseq.
+Visual diagram of how PDF export works with and without Logseq.
 
-## 🔄 Escenario 1: Solo PDF Export
+## 🔄 Scenario 1: PDF Export Only
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Configuración:                                             │
+│  Configuration:                                             │
 │  OCR_PDF_EXPORT_ENABLED=true                                │
 │  OCR_PDF_EXPORT_PATH=~/Documents/SupernotePDFs              │
 │  LOGSEQ_EXPORT_ENABLED=false                                │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Procesamiento OCR                                          │
-│  - Extrae páginas del .note                                 │
-│  - Envía a Vision Framework                                 │
-│  - Obtiene resultados OCR                                   │
+│  OCR Processing                                             │
+│  - Extract pages from .note                                 │
+│  - Send to Vision Framework                                 │
+│  - Get OCR results                                          │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Exportación PDF                                            │
-│  ✅ Genera PDF en ~/Documents/SupernotePDFs/Work/Meeting.pdf│
+│  PDF Export                                                 │
+│  ✅ Generate PDF in ~/Documents/SupernotePDFs/Work/Meeting.pdf│
 └─────────────────────────────────────────────────────────────┘
                             ↓
-                        ✅ FIN
+                        ✅ DONE
 ```
 
-**Resultado:**
-- 1 archivo PDF en `~/Documents/SupernotePDFs/`
-- No se genera nada para Logseq
+**Result:**
+- 1 PDF file in `~/Documents/SupernotePDFs/`
+- Nothing generated for Logseq
 
 ---
 
-## 🔄 Escenario 2: Solo Logseq Export
+## 🔄 Scenario 2: Logseq Export Only
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Configuración:                                             │
+│  Configuration:                                             │
 │  OCR_PDF_EXPORT_ENABLED=false                               │
 │  LOGSEQ_EXPORT_ENABLED=true                                 │
 │  LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote       │
@@ -45,34 +45,34 @@ Diagrama visual de cómo funciona la exportación de PDFs con y sin Logseq.
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Procesamiento OCR                                          │
-│  - Extrae páginas del .note                                 │
-│  - Envía a Vision Framework                                 │
-│  - Obtiene resultados OCR                                   │
+│  OCR Processing                                             │
+│  - Extract pages from .note                                 │
+│  - Send to Vision Framework                                 │
+│  - Get OCR results                                          │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Exportación Logseq                                         │
-│  ✅ Genera PDF en ~/logseq/assets/supernote/Work/Meeting.pdf│
-│  ✅ Genera MD en ~/logseq/pages/supernote/Work/Meeting.md   │
-│     (con enlace a ../assets/supernote/Work/Meeting.pdf)     │
+│  Logseq Export                                              │
+│  ✅ Generate PDF in ~/logseq/assets/supernote/Work/Meeting.pdf│
+│  ✅ Generate MD in ~/logseq/pages/supernote/Work/Meeting.md │
+│     (with link to ../assets/supernote/Work/Meeting.pdf)    │
 └─────────────────────────────────────────────────────────────┘
                             ↓
-                        ✅ FIN
+                        ✅ DONE
 ```
 
-**Resultado:**
-- 1 archivo PDF en `~/Documents/logseq/assets/supernote/`
-- 1 archivo MD en `~/Documents/logseq/pages/supernote/`
-- Enlace funciona correctamente
+**Result:**
+- 1 PDF file in `~/Documents/logseq/assets/supernote/`
+- 1 MD file in `~/Documents/logseq/pages/supernote/`
+- Link works correctly
 
 ---
 
-## 🔄 Escenario 3: PDF Export + Logseq Export
+## 🔄 Scenario 3: PDF Export + Logseq Export
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Configuración:                                             │
+│  Configuration:                                             │
 │  OCR_PDF_EXPORT_ENABLED=true                                │
 │  OCR_PDF_EXPORT_PATH=~/Documents/SupernotePDFs              │
 │  LOGSEQ_EXPORT_ENABLED=true                                 │
@@ -81,68 +81,68 @@ Diagrama visual de cómo funciona la exportación de PDFs con y sin Logseq.
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Procesamiento OCR                                          │
-│  - Extrae páginas del .note                                 │
-│  - Envía a Vision Framework                                 │
-│  - Obtiene resultados OCR                                   │
+│  OCR Processing                                             │
+│  - Extract pages from .note                                 │
+│  - Send to Vision Framework                                 │
+│  - Get OCR results                                          │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Exportación PDF                                            │
-│  ✅ Genera PDF en ~/Documents/SupernotePDFs/Work/Meeting.pdf│
-│  📝 Guarda ruta: pdf_path = /path/to/SupernotePDFs/...      │
+│  PDF Export                                                 │
+│  ✅ Generate PDF in ~/Documents/SupernotePDFs/Work/Meeting.pdf│
+│  📝 Save path: pdf_path = /path/to/SupernotePDFs/...        │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Exportación Logseq                                         │
-│  ✅ Copia PDF a ~/logseq/assets/supernote/Work/Meeting.pdf  │
-│     (desde pdf_path)                                        │
-│  ✅ Genera MD en ~/logseq/pages/supernote/Work/Meeting.md   │
-│     (con enlace a ../assets/supernote/Work/Meeting.pdf)     │
+│  Logseq Export                                              │
+│  ✅ Copy PDF to ~/logseq/assets/supernote/Work/Meeting.pdf  │
+│     (from pdf_path)                                         │
+│  ✅ Generate MD in ~/logseq/pages/supernote/Work/Meeting.md │
+│     (with link to ../assets/supernote/Work/Meeting.pdf)    │
 └─────────────────────────────────────────────────────────────┘
                             ↓
-                        ✅ FIN
+                        ✅ DONE
 ```
 
-**Resultado:**
-- 1 archivo PDF en `~/Documents/SupernotePDFs/` (original)
-- 1 archivo PDF en `~/Documents/logseq/assets/supernote/` (copia)
-- 1 archivo MD en `~/Documents/logseq/pages/supernote/`
-- Enlace funciona correctamente
-- **2 copias del mismo PDF** (más espacio, pero más flexible)
+**Result:**
+- 1 PDF file in `~/Documents/SupernotePDFs/` (original)
+- 1 PDF file in `~/Documents/logseq/assets/supernote/` (copy)
+- 1 MD file in `~/Documents/logseq/pages/supernote/`
+- Link works correctly
+- **2 copies of the same PDF** (more space, but more flexible)
 
 ---
 
-## 📊 Comparación de Escenarios
+## 📊 Scenario Comparison
 
-| Configuración | PDF en SupernotePDFs | PDF en Logseq Assets | MD en Logseq | Total PDFs |
+| Configuration | PDF in SupernotePDFs | PDF in Logseq Assets | MD in Logseq | Total PDFs |
 |---------------|---------------------|---------------------|--------------|------------|
-| **Solo PDF** | ✅ | ❌ | ❌ | 1 |
-| **Solo Logseq** | ❌ | ✅ | ✅ | 1 |
-| **Ambos** | ✅ | ✅ (copia) | ✅ | 2 |
+| **PDF Only** | ✅ | ❌ | ❌ | 1 |
+| **Logseq Only** | ❌ | ✅ | ✅ | 1 |
+| **Both** | ✅ | ✅ (copy) | ✅ | 2 |
 
-## 🎯 Recomendaciones
+## 🎯 Recommendations
 
-### Para Usuarios de Logseq
+### For Logseq Users
 
-**Opción Simple (Recomendada):**
+**Simple Option (Recommended):**
 ```bash
 LOGSEQ_EXPORT_ENABLED=true
 LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote
 LOGSEQ_ASSETS_PATH=~/Documents/logseq/assets
 ```
 
-**Ventajas:**
-- ✅ Menos configuración
-- ✅ Solo 1 copia del PDF (ahorra espacio)
-- ✅ Todo en Logseq
+**Advantages:**
+- ✅ Less configuration
+- ✅ Only 1 copy of PDF (saves space)
+- ✅ Everything in Logseq
 
-**Desventajas:**
-- ❌ No tienes PDFs fuera de Logseq para compartir
+**Disadvantages:**
+- ❌ No PDFs outside Logseq for sharing
 
 ---
 
-**Opción Completa:**
+**Complete Option:**
 ```bash
 OCR_PDF_EXPORT_ENABLED=true
 OCR_PDF_EXPORT_PATH=~/Documents/SupernotePDFs
@@ -152,59 +152,59 @@ LOGSEQ_PAGES_PATH=~/Documents/logseq/pages/supernote
 LOGSEQ_ASSETS_PATH=~/Documents/logseq/assets
 ```
 
-**Ventajas:**
-- ✅ PDFs en ubicación separada (fácil compartir/backup)
-- ✅ PDFs en Logseq (para enlaces)
-- ✅ Máxima flexibilidad
+**Advantages:**
+- ✅ PDFs in separate location (easy to share/backup)
+- ✅ PDFs in Logseq (for links)
+- ✅ Maximum flexibility
 
-**Desventajas:**
-- ❌ 2 copias del mismo PDF (usa más espacio)
-- ❌ Más configuración
+**Disadvantages:**
+- ❌ 2 copies of the same PDF (uses more space)
+- ❌ More configuration
 
 ---
 
-### Para Usuarios Sin Logseq
+### For Users Without Logseq
 
 ```bash
 OCR_PDF_EXPORT_ENABLED=true
 OCR_PDF_EXPORT_PATH=~/Documents/SupernotePDFs
 ```
 
-**Ventajas:**
+**Advantages:**
 - ✅ Simple
-- ✅ Solo 1 copia del PDF
-- ✅ Fácil compartir
+- ✅ Only 1 copy of PDF
+- ✅ Easy to share
 
 ---
 
-## 🔍 Detalles Técnicos
+## 🔍 Technical Details
 
-### Código Relevante (main.py)
+### Relevant Code (main.py)
 
 ```python
-# Línea 356-369: Exportación PDF
+# Line 356-369: PDF Export
 pdf_path = None
 if OCR_PDF_EXPORT_ENABLED and OCR_PDF_EXPORT_PATH and page_results:
-    pdf_path = export_note_to_pdf(...)  # Genera PDF
-    # pdf_path ahora contiene la ruta al PDF generado
+    pdf_path = export_note_to_pdf(...)  # Generate PDF
+    # pdf_path now contains the path to the generated PDF
 
-# Línea 372-381: Exportación Logseq
+# Line 372-381: Logseq Export
 if LOGSEQ_EXPORT_ENABLED and LOGSEQ_PAGES_PATH and LOGSEQ_ASSETS_PATH:
     export_note_to_logseq(
         ...
-        pdf_source_path=pdf_path  # Pasa la ruta (o None)
+        pdf_source_path=pdf_path  # Pass the path (or None)
     )
 ```
 
-### Código Relevante (logseq_exporter.py)
+### Relevant Code (logseq_exporter.py)
 
 ```python
-# Línea 175-195: Manejo del PDF
+# Line 175-195: PDF Handling
 if pdf_source_path and pdf_source_path.exists():
-    # Caso 1: PDF ya existe (generado por OCR_PDF_EXPORT)
+    # Case 1: PDF already exists (generated by OCR_PDF_EXPORT)
     shutil.copy2(pdf_source_path, pdf_asset_path)
 else:
-    # Caso 2: PDF no existe, generarlo directamente
+    # Case 2: PDF doesn't exist, generate it directly
     export_note_to_pdf(
         note_path,
         page_results,
@@ -213,29 +213,29 @@ else:
     )
 ```
 
-### Flujo de Decisión
+### Decision Flow
 
 ```
-¿pdf_source_path existe?
-    ├─ SÍ → Copiar PDF existente a Logseq assets
-    └─ NO → Generar PDF directamente en Logseq assets
+Does pdf_source_path exist?
+    ├─ YES → Copy existing PDF to Logseq assets
+    └─ NO → Generate PDF directly in Logseq assets
 ```
 
 ---
 
 ## ❓ FAQ
 
-**P: ¿Necesito `OCR_PDF_EXPORT_ENABLED=true` para usar Logseq?**  
-R: **NO**. Logseq genera su propio PDF automáticamente si no existe.
+**Q: Do I need `OCR_PDF_EXPORT_ENABLED=true` to use Logseq?**  
+A: **NO**. Logseq generates its own PDF automatically if it doesn't exist.
 
-**P: ¿Qué pasa si tengo ambos habilitados?**  
-R: Se generan 2 copias del PDF (una en `SupernotePDFs`, otra en `logseq/assets`).
+**Q: What happens if I have both enabled?**  
+A: 2 copies of the PDF are generated (one in `SupernotePDFs`, another in `logseq/assets`).
 
-**P: ¿Cuál es más eficiente?**  
-R: Solo Logseq (1 PDF generado). Con ambos se genera 1 PDF y se copia 1 vez.
+**Q: Which is more efficient?**  
+A: Logseq only (1 PDF generated). With both, 1 PDF is generated and copied once.
 
-**P: ¿Puedo cambiar de configuración después?**  
-R: Sí, pero los archivos ya generados no se mueven automáticamente.
+**Q: Can I change configuration later?**  
+A: Yes, but already generated files won't be moved automatically.
 
-**P: ¿Cómo elimino PDFs duplicados?**  
-R: Decide qué ubicación prefieres y borra la otra manualmente.
+**Q: How do I remove duplicate PDFs?**  
+A: Decide which location you prefer and delete the other manually.
