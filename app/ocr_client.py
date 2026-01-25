@@ -14,12 +14,13 @@ from PIL import Image
 # Max image dimension - balance between speed and accuracy
 # 1280 = high quality, ~60-140s/page
 # 800 = faster, ~30-60s/page, still good accuracy for handwriting
-MAX_IMAGE_DIMENSION = 800
+# None = no resize, process full resolution (slower but best accuracy)
+MAX_IMAGE_DIMENSION = None  # Process full resolution images
 
 logger = logging.getLogger(__name__)
 
 
-def resize_image_if_needed(image_bytes: bytes, max_dim: int = MAX_IMAGE_DIMENSION) -> tuple[bytes, int, int]:
+def resize_image_if_needed(image_bytes: bytes, max_dim: Optional[int] = MAX_IMAGE_DIMENSION) -> tuple[bytes, int, int]:
     """
     Resize image if larger than max dimension to avoid GPU OOM.
 
@@ -28,6 +29,11 @@ def resize_image_if_needed(image_bytes: bytes, max_dim: int = MAX_IMAGE_DIMENSIO
     """
     img = Image.open(io.BytesIO(image_bytes))
     w, h = img.size
+
+    # If max_dim is None, don't resize - process full resolution
+    if max_dim is None:
+        logger.info(f"Processing full resolution image: {w}x{h}")
+        return image_bytes, w, h
 
     if w <= max_dim and h <= max_dim:
         return image_bytes, w, h
@@ -86,7 +92,10 @@ class OCRClient:
             if resp.status_code != 200:
                 return False
             data = resp.json()
-            return data.get("model_loaded", False)
+            # Check if either Vision Framework or MLX model is available
+            vision_available = data.get("vision_available", False)
+            mlx_available = data.get("mlx_model_loaded", False)
+            return vision_available or mlx_available
         except Exception as e:
             logger.debug(f"Health check failed: {e}")
             return False
@@ -100,6 +109,53 @@ class OCRClient:
                 return True
             time.sleep(5)
         return False
+
+    def detect_visual_content(self, image_bytes: bytes) -> bool:
+        """
+        Quick detection of visual content (drawings, diagrams) vs text-only.
+        
+        Uses a simple prompt to ask if there are drawings/diagrams.
+        Very lightweight - just a yes/no question.
+        
+        Args:
+            image_bytes: PNG image as bytes
+            
+        Returns:
+            True if visual content detected, False otherwise
+        """
+        try:
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            
+            payload = {
+                "image_base64": image_base64,
+                "prompt_type": "visual_detection",
+                "max_tokens": 10,  # Very short response
+                "temperature": 0.0
+            }
+            
+            resp = self.session.post(
+                f"{self.base_url}/ocr",
+                json=payload,
+                timeout=30  # Quick timeout
+            )
+            resp.raise_for_status()
+            
+            data = resp.json()
+            result = data.get("result", {})
+            response_text = result.get("full_text", "").lower()
+            
+            # Simple detection - look for keywords indicating visual content
+            visual_keywords = ["yes", "drawing", "diagram", "sketch", "image", "picture", "chart", "graph"]
+            has_visual = any(keyword in response_text for keyword in visual_keywords)
+            
+            if has_visual:
+                logger.debug("Visual content detected in image")
+            
+            return has_visual
+            
+        except Exception as e:
+            logger.debug(f"Visual detection failed: {e}")
+            return False  # Fail silently - don't break OCR flow
 
     def ocr_image(
         self,
@@ -239,3 +295,43 @@ class OCRClient:
         """
         result = self.ocr_image(image_bytes, prompt_type="ocr_simple")
         return result.full_text
+
+    def generate_text(self, prompt: str, max_tokens: int = 500, temperature: float = 0.3) -> str:
+        """
+        Generate text using Qwen LLM (no image, text-only).
+        
+        Useful for:
+        - Summarizing OCR text
+        - Cleaning up OCR errors
+        - Extracting information
+        
+        Args:
+            prompt: Text prompt for generation
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative)
+            
+        Returns:
+            Generated text
+            
+        Raises:
+            requests.RequestException: On API errors
+            ValueError: If model not loaded
+        """
+        payload = {
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+        
+        resp = self.session.post(
+            f"{self.base_url}/generate",
+            json=payload,
+            timeout=self.timeout
+        )
+        
+        if resp.status_code == 503:
+            raise ValueError("Qwen model not loaded. Start OCR API with OCR_MODEL_PATH environment variable.")
+        
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("text", "")

@@ -320,6 +320,7 @@ def convert_ocr_to_supernote_format(
 
     CRITICAL: Supernote uses a scaled coordinate system!
     - Vision Framework returns bboxes in PNG pixels (e.g., x=420, y=711)
+    - Qwen returns bboxes as percentages (0-100) of image dimensions
     - Supernote expects coordinates divided by 11.9 (e.g., x=35.3, y=59.7)
     - This scaling factor was empirically determined by comparing device OCR to Vision OCR
     - Without this scaling, search highlighting appears in wrong positions
@@ -344,8 +345,17 @@ def convert_ocr_to_supernote_format(
 
             line_text_parts.append(text)
 
-            # bbox format: [left, top, right, bottom] in PNG pixels
+            # bbox format: [left, top, right, bottom]
             left, top, right, bottom = block.bbox
+
+            # Check if coordinates are percentages (Qwen) or pixels (Vision)
+            # Qwen returns 0-100, Vision returns pixel values (typically > 100)
+            if max(left, top, right, bottom) <= 100:
+                # Qwen format: percentages (0-100) - convert to pixels first
+                left = (left / 100.0) * original_width
+                top = (top / 100.0) * original_height
+                right = (right / 100.0) * original_width
+                bottom = (bottom / 100.0) * original_height
 
             # Convert to Supernote's scaled coordinate system
             x = float(left) / SUPERNOTE_SCALE_FACTOR
